@@ -1,0 +1,12 @@
+# FaceFit 백엔드에 필요한 Python 라이브러리 목록입니다.
+# 설치 방법:  pip install -r requirements.txt
+# (참고: AI 라이브러리 호환을 위해 Python 3.12 사용)
+
+# 웹 서버
+fastapi
+uvicorn
+python-multipart        # 사진 파일 업로드를 받기 위해 필요
+
+# AI / 이미지 처리
+opencv-python           # 이미지 읽기·처리
+mediapipe               # 얼굴 랜드마크(특징점) 검출
