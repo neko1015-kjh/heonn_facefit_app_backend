@@ -2,6 +2,7 @@
 # 모바일 앱(heonn_facefit_app_mobile)과 통신하는 Python 서버입니다.
 
 import os
+import math
 
 import cv2
 import numpy as np
@@ -100,4 +101,103 @@ async def detect_landmarks(file: UploadFile = File(...)):
         "landmark_count": len(landmarks),
         "image_size": {"width": width, "height": height},
         "landmarks": landmarks,
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# 얼굴 점수 계산에 사용하는 도우미 함수들
+# (검출된 얼굴 특징점의 위치를 기하학적으로 분석해 점수를 매깁니다.)
+# ─────────────────────────────────────────────────────────────
+
+def _point(face, idx, w, h):
+    """특징점 번호(idx)의 픽셀 좌표(x, y)를 돌려줍니다."""
+    p = face[idx]
+    return (p.x * w, p.y * h)
+
+
+def _distance(a, b):
+    """두 점 사이의 거리입니다."""
+    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
+def _compute_scores(face, w, h):
+    """
+    얼굴 특징점들로 두 가지 점수를 계산합니다.
+    - 안면 비대칭 점수: 좌우 짝이 되는 점들이 얼마나 대칭인지
+    - 좌우 균형(부기) 점수: 얼굴 왼쪽/오른쪽 폭이 얼마나 비슷한지
+    두 점수 모두 0~100점이며, 높을수록 좋습니다.
+    """
+    # 얼굴 중앙선(세로) 위치: 이마·미간·코끝·턱 등 중앙 점들의 평균 x
+    center_ids = [10, 168, 1, 152]
+    midline_x = sum(_point(face, i, w, h)[0] for i in center_ids) / len(center_ids)
+
+    # 기준 크기: 얼굴 너비(좌우 끝)와 높이(이마~턱)
+    face_width = _distance(_point(face, 234, w, h), _point(face, 454, w, h))
+    face_height = _distance(_point(face, 10, w, h), _point(face, 152, w, h))
+    if face_width < 1 or face_height < 1:
+        return None  # 얼굴이 너무 작거나 잘못 검출된 경우
+
+    # 좌우로 짝이 되는 특징점들 (눈, 입꼬리, 눈썹, 코 옆, 볼)
+    pairs = [(33, 263), (133, 362), (61, 291), (105, 334), (129, 358), (50, 280)]
+    errors = []
+    for left_id, right_id in pairs:
+        lx, ly = _point(face, left_id, w, h)
+        rx, ry = _point(face, right_id, w, h)
+        # 가로 대칭 오차: 중앙선에서 두 점까지의 거리 차이
+        horizontal = abs((midline_x - lx) - (rx - midline_x)) / face_width
+        # 세로 오차: 두 점의 높이 차이
+        vertical = abs(ly - ry) / face_height
+        errors.append(horizontal + vertical)
+    mean_error = sum(errors) / len(errors)
+
+    # 비대칭 점수: 오차가 작을수록 100점에 가까움
+    symmetry_score = round(max(0.0, min(100.0, 100.0 - mean_error * 250.0)))
+
+    # 좌우 균형(부기) 점수: 중앙선 기준 왼쪽/오른쪽 폭 차이
+    left_width = abs(midline_x - _point(face, 234, w, h)[0])
+    right_width = abs(_point(face, 454, w, h)[0] - midline_x)
+    avg_width = (left_width + right_width) / 2
+    imbalance = abs(left_width - right_width) / avg_width if avg_width > 0 else 0
+    balance_score = round(max(0.0, min(100.0, 100.0 - imbalance * 150.0)))
+
+    return [
+        {"key": "symmetry", "label": "안면 비대칭 개선도", "value": symmetry_score},
+        {"key": "balance", "label": "좌우 균형 (부기)", "value": balance_score},
+    ]
+
+
+# [실제 AI 기능 2단계] 얼굴 점수 분석 주소입니다. ("/scan/analyze")
+# 사진을 보내면 얼굴을 검출한 뒤, 비대칭/균형 점수를 계산해 돌려줍니다.
+@app.post("/scan/analyze")
+async def analyze_face(file: UploadFile = File(...)):
+    # 1) 사진 읽기
+    raw = await file.read()
+    image_array = np.frombuffer(raw, np.uint8)
+    image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+    if image is None:
+        return {"detected": False, "message": "이미지를 읽을 수 없습니다."}
+
+    height, width = image.shape[:2]
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # 2) 얼굴 검출
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+    result = face_landmarker.detect(mp_image)
+    if not result.face_landmarks:
+        return {
+            "detected": False,
+            "message": "사진에서 얼굴을 찾지 못했습니다. 정면 얼굴이 잘 보이는 사진을 사용해 주세요.",
+        }
+
+    # 3) 점수 계산
+    scores = _compute_scores(result.face_landmarks[0], width, height)
+    if scores is None:
+        return {"detected": False, "message": "얼굴이 너무 작습니다. 더 가까이서 찍은 사진을 사용해 주세요."}
+
+    # 4) 결과 반환
+    return {
+        "detected": True,
+        "message": "얼굴 점수 분석이 완료되었습니다.",
+        "image_size": {"width": width, "height": height},
+        "scores": scores,
     }
