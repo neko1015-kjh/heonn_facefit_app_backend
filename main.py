@@ -49,13 +49,21 @@ def _init_db():
         """
         CREATE TABLE IF NOT EXISTS scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at TEXT NOT NULL,      -- 분석한 시각
-            symmetry INTEGER NOT NULL,     -- 안면 비대칭 점수
-            balance INTEGER NOT NULL,      -- 좌우 균형(부기) 점수
-            image_filename TEXT NOT NULL   -- 저장된 사진 파일 이름
+            created_at TEXT NOT NULL,        -- 분석한 시각
+            symmetry INTEGER NOT NULL,       -- 안면 비대칭 점수
+            balance INTEGER NOT NULL,        -- 좌우 균형(부기) 점수
+            skin_brightness INTEGER DEFAULT 0,  -- 피부 밝기(0~255)
+            skin_redness INTEGER DEFAULT 0,     -- 피부 붉은기
+            image_filename TEXT NOT NULL     -- 저장된 사진 파일 이름
         )
         """
     )
+    # 예전 버전 DB에 피부톤 컬럼이 없으면 추가합니다(자동 마이그레이션).
+    existing = [row[1] for row in conn.execute("PRAGMA table_info(scans)").fetchall()]
+    if "skin_brightness" not in existing:
+        conn.execute("ALTER TABLE scans ADD COLUMN skin_brightness INTEGER DEFAULT 0")
+    if "skin_redness" not in existing:
+        conn.execute("ALTER TABLE scans ADD COLUMN skin_redness INTEGER DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -169,8 +177,38 @@ def _compute_scores(face, w, h):
     return {"symmetry": symmetry_score, "balance": balance_score}
 
 
+def _compute_skin_tone(image, face, w, h):
+    """
+    볼·이마 등 피부 영역의 색을 모아 피부톤을 분석합니다.
+    - brightness: 피부 밝기(0~255, 높을수록 밝음)
+    - redness: 붉은기(높을수록 홍조/붉은 편)
+    image는 OpenCV 기준 BGR 순서입니다.
+    """
+    # 피부가 잘 드러나는 특징점들(양 볼, 이마 중앙, 코)
+    skin_ids = [50, 280, 101, 330, 151, 1]
+    patch = max(2, int(min(w, h) * 0.01))  # 사진 크기에 비례한 표본 영역
+    samples = []
+    for idx in skin_ids:
+        x = int(face[idx].x * w)
+        y = int(face[idx].y * h)
+        x0, x1 = max(0, x - patch), min(w, x + patch)
+        y0, y1 = max(0, y - patch), min(h, y + patch)
+        region = image[y0:y1, x0:x1]
+        if region.size > 0:
+            samples.append(region.reshape(-1, 3).mean(axis=0))  # (B, G, R) 평균
+
+    if not samples:
+        return {"brightness": 0, "redness": 0}
+
+    mean_bgr = np.mean(samples, axis=0)
+    b, g, r = float(mean_bgr[0]), float(mean_bgr[1]), float(mean_bgr[2])
+    brightness = round((r + g + b) / 3)
+    redness = round(r - (g + b) / 2)
+    return {"brightness": brightness, "redness": redness}
+
+
 def _detect_and_score(raw):
-    """사진 데이터(raw)를 받아 얼굴을 검출하고 점수를 계산합니다."""
+    """사진 데이터(raw)를 받아 얼굴을 검출하고 점수·피부톤을 계산합니다."""
     image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
         return {"detected": False, "message": "이미지를 읽을 수 없습니다."}
@@ -185,16 +223,19 @@ def _detect_and_score(raw):
             "message": "사진에서 얼굴을 찾지 못했습니다. 정면 얼굴이 잘 보이는 사진을 사용해 주세요.",
         }
 
-    scores = _compute_scores(result.face_landmarks[0], width, height)
+    face = result.face_landmarks[0]
+    scores = _compute_scores(face, width, height)
     if scores is None:
         return {"detected": False, "message": "얼굴이 너무 작습니다. 더 가까이서 찍은 사진을 사용해 주세요."}
 
+    skin = _compute_skin_tone(image, face, width, height)
     return {
         "detected": True,
         "width": width,
         "height": height,
         "scores": scores,
-        "landmark_count": len(result.face_landmarks[0]),
+        "skin": skin,
+        "landmark_count": len(face),
     }
 
 
@@ -252,12 +293,17 @@ async def save_scan(file: UploadFile = File(...)):
     created_at = datetime.now().isoformat(timespec="seconds")
     symmetry = res["scores"]["symmetry"]
     balance = res["scores"]["balance"]
+    brightness = res["skin"]["brightness"]
+    redness = res["skin"]["redness"]
 
     # 데이터베이스에 기록을 추가합니다.
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
-        "INSERT INTO scans (created_at, symmetry, balance, image_filename) VALUES (?, ?, ?, ?)",
-        (created_at, symmetry, balance, filename),
+        """
+        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, image_filename)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (created_at, symmetry, balance, brightness, redness, filename),
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -281,3 +327,103 @@ def get_history():
     conn.close()
     records = [_record_dict(*row) for row in rows]
     return {"count": len(records), "records": records}
+
+
+# ─────────────────────────────────────────────────────────────
+# [실제 AI 기능 4단계] 부기 + 피부톤 기반 맞춤 제품 추천
+# ─────────────────────────────────────────────────────────────
+
+# 추천 후보 제품 목록입니다. (프로토타입용)
+_PRODUCT_CATALOG = {
+    "cooling": {"name": "HeOnn 쿨링 디톡스 앰플", "desc": "부기 완화·림프 케어"},
+    "soothing": {"name": "HeOnn 시카 진정 크림", "desc": "붉은기·민감 진정"},
+    "brightening": {"name": "HeOnn 비타민C 세럼", "desc": "칙칙한 톤 보정·브라이트닝"},
+    "moisture": {"name": "HeOnn 딥 모이스처 크림", "desc": "기본 보습·장벽 강화"},
+    "lifting": {"name": "HeOnn 탄력 리프팅 크림", "desc": "탄력·비대칭 케어"},
+}
+
+
+def _build_recommendations(symmetry, balance, brightness, redness):
+    """부기(balance)·피부톤(밝기/붉은기)·비대칭(symmetry)에 맞춰 제품을 고릅니다."""
+    items = []
+
+    # 1) 부기 점수가 낮으면(=부기 있음) 쿨링/디톡스
+    if balance < 85:
+        items.append({**_PRODUCT_CATALOG["cooling"],
+                      "reason": f"좌우 균형(부기) {balance}점 — 부기 완화 케어가 필요해요"})
+
+    # 2) 붉은기가 강하면 진정 케어
+    if redness >= 30:
+        items.append({**_PRODUCT_CATALOG["soothing"],
+                      "reason": "피부에 붉은기가 있어 진정 케어를 추천해요"})
+
+    # 3) 피부 톤이 어두운 편이면 브라이트닝
+    if brightness < 130:
+        items.append({**_PRODUCT_CATALOG["brightening"],
+                      "reason": "피부 톤이 다소 어두워 톤 보정을 추천해요"})
+
+    # 4) 비대칭 점수가 낮으면 탄력 리프팅
+    if symmetry < 85:
+        items.append({**_PRODUCT_CATALOG["lifting"],
+                      "reason": f"안면 비대칭 {symmetry}점 — 탄력 리프팅 케어"})
+
+    # 추천이 2개 미만이면 기본 보습 제품을 더합니다.
+    if len(items) < 2:
+        items.append({**_PRODUCT_CATALOG["moisture"],
+                      "reason": "데일리 기본 보습으로 추천해요"})
+
+    return items
+
+
+def _tone_labels(brightness, redness):
+    """피부톤을 사람이 읽기 쉬운 말로 바꿉니다."""
+    if brightness >= 170:
+        tone = "밝은 톤"
+    elif brightness >= 130:
+        tone = "중간 톤"
+    else:
+        tone = "어두운 톤"
+    if redness >= 30:
+        red = "붉은기 있음"
+    elif redness >= 15:
+        red = "약간 붉은기"
+    else:
+        red = "차분한 톤"
+    return tone, red
+
+
+# 가장 최근 분석 결과를 바탕으로 맞춤 추천을 돌려줍니다. ("/recommendations")
+@app.get("/recommendations")
+def get_recommendations():
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        """
+        SELECT symmetry, balance, skin_brightness, skin_redness
+        FROM scans ORDER BY id DESC LIMIT 1
+        """
+    ).fetchone()
+    conn.close()
+
+    # 아직 분석 기록이 없으면 기본 추천을 돌려줍니다.
+    if row is None:
+        return {
+            "has_record": False,
+            "message": "AI스캔에서 얼굴을 분석하면 맞춤 추천을 받을 수 있어요.",
+            "products": [
+                {**_PRODUCT_CATALOG["moisture"], "reason": "기본 보습 추천"},
+                {**_PRODUCT_CATALOG["cooling"], "reason": "부기 케어 인기 제품"},
+            ],
+        }
+
+    symmetry, balance, brightness, redness = row
+    tone, red = _tone_labels(brightness, redness)
+    return {
+        "has_record": True,
+        "summary": {
+            "balance": balance,
+            "symmetry": symmetry,
+            "skin_tone": tone,
+            "skin_redness": red,
+        },
+        "products": _build_recommendations(symmetry, balance, brightness, redness),
+    }
