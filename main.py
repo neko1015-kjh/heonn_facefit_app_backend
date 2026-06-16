@@ -229,6 +229,8 @@ def _detect_and_score(raw):
         return {"detected": False, "message": "얼굴이 너무 작습니다. 더 가까이서 찍은 사진을 사용해 주세요."}
 
     skin = _compute_skin_tone(image, face, width, height)
+    # 화면에 점을 찍을 수 있도록 좌표(0~1 비율)를 함께 담습니다. (2D 표시용이라 x, y만)
+    landmarks = [{"x": round(p.x, 4), "y": round(p.y, 4)} for p in face]
     return {
         "detected": True,
         "width": width,
@@ -236,6 +238,7 @@ def _detect_and_score(raw):
         "scores": scores,
         "skin": skin,
         "landmark_count": len(face),
+        "landmarks": landmarks,
     }
 
 
@@ -313,6 +316,8 @@ async def save_scan(file: UploadFile = File(...)):
         "detected": True,
         "message": "분석 결과를 기록에 저장했습니다.",
         "landmark_count": res["landmark_count"],
+        "image_size": {"width": res["width"], "height": res["height"]},
+        "landmarks": res["landmarks"],
         "record": _record_dict(new_id, created_at, symmetry, balance, filename),
     }
 
@@ -334,45 +339,64 @@ def get_history():
 # ─────────────────────────────────────────────────────────────
 
 # 추천 후보 제품 목록입니다. (프로토타입용)
+# 제품별 대표 이미지(온라인 화장품 사진)도 함께 둡니다.
 _PRODUCT_CATALOG = {
-    "cooling": {"name": "HeOnn 쿨링 디톡스 앰플", "desc": "부기 완화·림프 케어"},
-    "soothing": {"name": "HeOnn 시카 진정 크림", "desc": "붉은기·민감 진정"},
-    "brightening": {"name": "HeOnn 비타민C 세럼", "desc": "칙칙한 톤 보정·브라이트닝"},
-    "moisture": {"name": "HeOnn 딥 모이스처 크림", "desc": "기본 보습·장벽 강화"},
-    "lifting": {"name": "HeOnn 탄력 리프팅 크림", "desc": "탄력·비대칭 케어"},
+    "cooling": {
+        "name": "HeOnn 쿨링 디톡스 앰플",
+        "desc": "부기 완화·림프 케어",
+        "image": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=400&q=70",
+    },
+    "soothing": {
+        "name": "HeOnn 시카 진정 크림",
+        "desc": "붉은기·민감 진정",
+        "image": "https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=400&q=70",
+    },
+    "brightening": {
+        "name": "HeOnn 비타민C 세럼",
+        "desc": "칙칙한 톤 보정·브라이트닝",
+        "image": "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?auto=format&fit=crop&w=400&q=70",
+    },
+    "moisture": {
+        "name": "HeOnn 딥 모이스처 크림",
+        "desc": "기본 보습·장벽 강화",
+        "image": "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=400&q=70",
+    },
+    "lifting": {
+        "name": "HeOnn 탄력 리프팅 크림",
+        "desc": "탄력·비대칭 케어",
+        "image": "https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?auto=format&fit=crop&w=400&q=70",
+    },
 }
 
 
 def _build_recommendations(symmetry, balance, brightness, redness):
-    """부기(balance)·피부톤(밝기/붉은기)·비대칭(symmetry)에 맞춰 제품을 고릅니다."""
+    """부기(balance)·피부톤(밝기/붉은기)·비대칭(symmetry)에 맞춰 제품을 고릅니다.
+    분석에 맞는 제품을 앞쪽에 두고, 최대 5개까지 채워서 돌려줍니다."""
     items = []
+    used = set()
 
-    # 1) 부기 점수가 낮으면(=부기 있음) 쿨링/디톡스
+    def add(key, reason):
+        if key not in used:
+            items.append({**_PRODUCT_CATALOG[key], "reason": reason})
+            used.add(key)
+
+    # 1) 분석 결과에 맞는 맞춤 추천 (이유 포함)
     if balance < 85:
-        items.append({**_PRODUCT_CATALOG["cooling"],
-                      "reason": f"좌우 균형(부기) {balance}점 — 부기 완화 케어가 필요해요"})
-
-    # 2) 붉은기가 강하면 진정 케어
+        add("cooling", f"좌우 균형(부기) {balance}점 — 부기 완화 케어가 필요해요")
     if redness >= 30:
-        items.append({**_PRODUCT_CATALOG["soothing"],
-                      "reason": "피부에 붉은기가 있어 진정 케어를 추천해요"})
-
-    # 3) 피부 톤이 어두운 편이면 브라이트닝
+        add("soothing", "피부에 붉은기가 있어 진정 케어를 추천해요")
     if brightness < 130:
-        items.append({**_PRODUCT_CATALOG["brightening"],
-                      "reason": "피부 톤이 다소 어두워 톤 보정을 추천해요"})
-
-    # 4) 비대칭 점수가 낮으면 탄력 리프팅
+        add("brightening", "피부 톤이 다소 어두워 톤 보정을 추천해요")
     if symmetry < 85:
-        items.append({**_PRODUCT_CATALOG["lifting"],
-                      "reason": f"안면 비대칭 {symmetry}점 — 탄력 리프팅 케어"})
+        add("lifting", f"안면 비대칭 {symmetry}점 — 탄력 리프팅 케어")
 
-    # 추천이 2개 미만이면 기본 보습 제품을 더합니다.
-    if len(items) < 2:
-        items.append({**_PRODUCT_CATALOG["moisture"],
-                      "reason": "데일리 기본 보습으로 추천해요"})
+    # 2) 5개가 될 때까지 나머지 제품으로 채웁니다.
+    for key in ["cooling", "soothing", "brightening", "moisture", "lifting"]:
+        if len(items) >= 5:
+            break
+        add(key, "피부 컨디션 관리에 함께 추천해요")
 
-    return items
+    return items[:5]
 
 
 def _tone_labels(brightness, redness):
@@ -404,14 +428,14 @@ def get_recommendations():
     ).fetchone()
     conn.close()
 
-    # 아직 분석 기록이 없으면 기본 추천을 돌려줍니다.
+    # 아직 분석 기록이 없으면 기본 추천(전체 제품)을 돌려줍니다.
     if row is None:
         return {
             "has_record": False,
             "message": "AI스캔에서 얼굴을 분석하면 맞춤 추천을 받을 수 있어요.",
             "products": [
-                {**_PRODUCT_CATALOG["moisture"], "reason": "기본 보습 추천"},
-                {**_PRODUCT_CATALOG["cooling"], "reason": "부기 케어 인기 제품"},
+                {**_PRODUCT_CATALOG[key], "reason": "인기 추천 제품"}
+                for key in ["moisture", "cooling", "soothing", "brightening", "lifting"]
             ],
         }
 
