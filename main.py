@@ -114,7 +114,7 @@ async def detect_landmarks(file: UploadFile = File(...)):
     if not result.face_landmarks:
         return {
             "detected": False,
-            "message": "사진에서 얼굴을 찾지 못했습니다. 정면 얼굴이 잘 보이는 사진을 사용해 주세요.",
+            "message": "얼굴 사진이 아니거나 얼굴을 찾지 못했습니다. 얼굴이 정면으로 잘 보이는 사진을 사용해 주세요.",
             "image_size": {"width": width, "height": height},
         }
 
@@ -213,11 +213,39 @@ def _compute_skin_tone(image, face, w, h):
     return {"brightness": brightness, "redness": redness}
 
 
+def _validate_face(face, w, h):
+    """
+    검출된 얼굴이 '분석 가능한 정확한 정면 얼굴'인지 확인합니다.
+    문제가 있으면 사용자에게 보여줄 안내 문구를, 정상이면 None을 돌려줍니다.
+    """
+    # 1) 얼굴이 사진에서 너무 작은지 (멀리서 찍었거나 얼굴이 작게 나온 경우)
+    top = _point(face, 10, w, h)
+    chin = _point(face, 152, w, h)
+    face_height = _distance(top, chin)
+    if face_height < h * 0.12:
+        return "얼굴이 너무 작게 나왔어요. 얼굴이 화면에 크게 보이도록 정면에서 다시 촬영해 주세요."
+
+    # 2) 얼굴이 많이 기울어졌는지 (양 눈을 잇는 선의 각도로 판단)
+    left_eye = _point(face, 33, w, h)
+    right_eye = _point(face, 263, w, h)
+    angle = math.degrees(math.atan2(right_eye[1] - left_eye[1], right_eye[0] - left_eye[0]))
+    if abs(angle) > 30:
+        return "얼굴이 기울어져 있어요. 정면을 향해 똑바로 촬영해 주세요."
+
+    # 3) 얼굴 윤곽이 화면 밖으로 많이 잘렸는지 (정면·전체가 보여야 함)
+    for idx in (10, 152, 234, 454):
+        px, py = face[idx].x, face[idx].y
+        if px < -0.03 or px > 1.03 or py < -0.03 or py > 1.03:
+            return "얼굴이 화면 밖으로 잘렸어요. 얼굴 전체가 보이도록 다시 촬영해 주세요."
+
+    return None
+
+
 def _detect_and_score(raw):
     """사진 데이터(raw)를 받아 얼굴을 검출하고 점수·피부톤을 계산합니다."""
     image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
-        return {"detected": False, "message": "이미지를 읽을 수 없습니다."}
+        return {"detected": False, "message": "이미지를 읽을 수 없습니다. 올바른 사진 파일인지 확인해 주세요."}
 
     height, width = image.shape[:2]
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -226,13 +254,19 @@ def _detect_and_score(raw):
     if not result.face_landmarks:
         return {
             "detected": False,
-            "message": "사진에서 얼굴을 찾지 못했습니다. 정면 얼굴이 잘 보이는 사진을 사용해 주세요.",
+            "message": "얼굴 사진이 아니거나 얼굴을 찾지 못했습니다. 얼굴이 정면으로 잘 보이는 사진을 사용해 주세요.",
         }
 
     face = result.face_landmarks[0]
+
+    # 정확한 정면 얼굴인지 품질 검사
+    problem = _validate_face(face, width, height)
+    if problem:
+        return {"detected": False, "message": problem}
+
     scores = _compute_scores(face, width, height)
     if scores is None:
-        return {"detected": False, "message": "얼굴이 너무 작습니다. 더 가까이서 찍은 사진을 사용해 주세요."}
+        return {"detected": False, "message": "얼굴이 정확히 인식되지 않았어요. 정면 얼굴이 잘 보이는 사진으로 다시 시도해 주세요."}
 
     skin = _compute_skin_tone(image, face, width, height)
     # 화면에 점을 찍을 수 있도록 좌표(0~1 비율)를 함께 담습니다. (2D 표시용이라 x, y만)
