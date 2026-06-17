@@ -3,6 +3,7 @@
 
 import os
 import math
+import json
 import uuid
 import sqlite3
 from datetime import datetime
@@ -66,6 +67,8 @@ def _init_db():
         conn.execute("ALTER TABLE scans ADD COLUMN skin_redness INTEGER DEFAULT 0")
     if "care_side" not in existing:
         conn.execute("ALTER TABLE scans ADD COLUMN care_side TEXT DEFAULT ''")
+    if "signature" not in existing:
+        conn.execute("ALTER TABLE scans ADD COLUMN signature TEXT DEFAULT ''")
     conn.commit()
     conn.close()
 
@@ -241,6 +244,39 @@ def _validate_face(face, w, h):
     return None
 
 
+def _compute_signature(face, w, h):
+    """
+    얼굴 비율로 '얼굴 서명(특징 벡터)'을 만듭니다.
+    두 눈 사이 거리로 나눠 크기에 무관한 비율값들로 구성하므로,
+    같은 사람은 비슷하고 다른 사람은 차이가 큽니다. (동일인 판별용 휴리스틱)
+    """
+    def d(i, j):
+        return _distance(_point(face, i, w, h), _point(face, j, w, h))
+
+    iod = d(33, 263)  # 두 눈 바깥 끝 사이 거리(기준)
+    if iod < 1:
+        return []
+    ratios = [
+        d(234, 454),  # 얼굴 너비
+        d(10, 152),   # 얼굴 높이
+        d(129, 358),  # 코 너비
+        d(61, 291),   # 입 너비
+        d(133, 362),  # 양 눈 안쪽 거리
+        d(105, 334),  # 눈썹 사이
+        d(168, 1),    # 코 길이
+        d(1, 152),    # 코끝~턱
+        d(105, 33),   # 눈썹~눈
+    ]
+    return [round(x / iod, 4) for x in ratios]
+
+
+def _signature_distance(a, b):
+    """두 얼굴 서명 사이의 거리(작을수록 같은 사람일 가능성↑). 비교 불가 시 None."""
+    if not a or not b or len(a) != len(b):
+        return None
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+
 def _detect_and_score(raw):
     """사진 데이터(raw)를 받아 얼굴을 검출하고 점수·피부톤을 계산합니다."""
     image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
@@ -269,6 +305,7 @@ def _detect_and_score(raw):
         return {"detected": False, "message": "얼굴이 정확히 인식되지 않았어요. 정면 얼굴이 잘 보이는 사진으로 다시 시도해 주세요."}
 
     skin = _compute_skin_tone(image, face, width, height)
+    signature = _compute_signature(face, width, height)
     # 화면에 점을 찍을 수 있도록 좌표(0~1 비율)를 함께 담습니다. (2D 표시용이라 x, y만)
     landmarks = [{"x": round(p.x, 4), "y": round(p.y, 4)} for p in face]
     return {
@@ -277,6 +314,7 @@ def _detect_and_score(raw):
         "height": height,
         "scores": scores,
         "skin": skin,
+        "signature": signature,
         "landmark_count": len(face),
         "landmarks": landmarks,
     }
@@ -290,14 +328,19 @@ def _score_list(symmetry, balance):
     ]
 
 
-def _record_dict(rid, created_at, symmetry, balance, image_filename, care_side=""):
+def _record_dict(rid, created_at, symmetry, balance, image_filename, care_side="", signature_json=""):
     """이력 한 건을 앱에 돌려줄 형태로 정리합니다."""
+    try:
+        signature = json.loads(signature_json) if signature_json else []
+    except (ValueError, TypeError):
+        signature = []
     return {
         "id": rid,
         "created_at": created_at,
         "image_url": f"/uploads/{image_filename}",
         "scores": _score_list(symmetry, balance),
         "care_side": care_side,
+        "signature": signature,
     }
 
 
@@ -340,15 +383,16 @@ async def save_scan(file: UploadFile = File(...)):
     care_side = res["scores"]["care_side"]
     brightness = res["skin"]["brightness"]
     redness = res["skin"]["redness"]
+    signature_json = json.dumps(res["signature"])
 
     # 데이터베이스에 기록을 추가합니다.
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, image_filename)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, image_filename)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (created_at, symmetry, balance, brightness, redness, care_side, filename),
+        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, filename),
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -360,7 +404,7 @@ async def save_scan(file: UploadFile = File(...)):
         "landmark_count": res["landmark_count"],
         "image_size": {"width": res["width"], "height": res["height"]},
         "landmarks": res["landmarks"],
-        "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side),
+        "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side, signature_json),
     }
 
 
@@ -369,7 +413,7 @@ async def save_scan(file: UploadFile = File(...)):
 def get_history():
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute(
-        "SELECT id, created_at, symmetry, balance, image_filename, care_side FROM scans ORDER BY id DESC"
+        "SELECT id, created_at, symmetry, balance, image_filename, care_side, signature FROM scans ORDER BY id DESC"
     ).fetchall()
     conn.close()
     records = [_record_dict(*row) for row in rows]
