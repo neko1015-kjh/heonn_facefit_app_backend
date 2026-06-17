@@ -6,6 +6,7 @@ import math
 import json
 import uuid
 import sqlite3
+import urllib.request
 from datetime import datetime
 
 import cv2
@@ -76,9 +77,21 @@ def _init_db():
 _init_db()
 
 # 얼굴 랜드마크(특징점) 검출기를 준비합니다.
-# 모델 파일(face_landmarker.task)은 아래 주소에서 한 번 내려받아 이 폴더에 둡니다.
-#   https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+# 모델 파일(face_landmarker.task)이 없으면 자동으로 내려받습니다.
+# (클라우드에 배포할 때 모델 파일을 따로 올리지 않아도 되도록)
+MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
+    "face_landmarker/float16/1/face_landmarker.task"
+)
 MODEL_PATH = os.path.join(BASE_DIR, "face_landmarker.task")
+if not os.path.exists(MODEL_PATH):
+    try:
+        print("얼굴 모델 다운로드 중...")
+        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+        print("얼굴 모델 다운로드 완료")
+    except Exception as e:
+        print("얼굴 모델 다운로드 실패:", e)
+
 _base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
 _landmarker_options = vision.FaceLandmarkerOptions(
     base_options=_base_options,

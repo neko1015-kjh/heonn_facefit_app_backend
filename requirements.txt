@@ -8,5 +8,5 @@ uvicorn
 python-multipart        # 사진 파일 업로드를 받기 위해 필요
 
 # AI / 이미지 처리
-opencv-python           # 이미지 읽기·처리
+opencv-python-headless  # 이미지 읽기·처리 (서버/클라우드용 — GUI 라이브러리 불필요)
 mediapipe               # 얼굴 랜드마크(특징점) 검출

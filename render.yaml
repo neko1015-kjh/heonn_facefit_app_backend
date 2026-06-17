@@ -1,0 +1,9 @@
+# Render.com 배포 설정 (블루프린트)
+# Render 대시보드에서 이 저장소를 연결하면 자동으로 아래 설정으로 배포됩니다.
+services:
+  - type: web
+    name: heonn-facefit-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
