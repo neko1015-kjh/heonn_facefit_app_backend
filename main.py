@@ -64,6 +64,8 @@ def _init_db():
         conn.execute("ALTER TABLE scans ADD COLUMN skin_brightness INTEGER DEFAULT 0")
     if "skin_redness" not in existing:
         conn.execute("ALTER TABLE scans ADD COLUMN skin_redness INTEGER DEFAULT 0")
+    if "care_side" not in existing:
+        conn.execute("ALTER TABLE scans ADD COLUMN care_side TEXT DEFAULT ''")
     conn.commit()
     conn.close()
 
@@ -168,13 +170,17 @@ def _compute_scores(face, w, h):
     mean_error = sum(errors) / len(errors)
     symmetry_score = round(max(0.0, min(100.0, 100.0 - mean_error * 250.0)))
 
+    # 좌우 끝점(234=사진 왼쪽=사용자 오른쪽, 454=사진 오른쪽=사용자 왼쪽)
     left_width = abs(midline_x - _point(face, 234, w, h)[0])
     right_width = abs(_point(face, 454, w, h)[0] - midline_x)
     avg_width = (left_width + right_width) / 2
     imbalance = abs(left_width - right_width) / avg_width if avg_width > 0 else 0
     balance_score = round(max(0.0, min(100.0, 100.0 - imbalance * 150.0)))
 
-    return {"symmetry": symmetry_score, "balance": balance_score}
+    # 더 넓은(부은) 쪽 = 케어가 필요한 쪽. 사용자 기준으로 표기합니다.
+    care_side = "오른쪽" if left_width > right_width else "왼쪽"
+
+    return {"symmetry": symmetry_score, "balance": balance_score, "care_side": care_side}
 
 
 def _compute_skin_tone(image, face, w, h):
@@ -250,13 +256,14 @@ def _score_list(symmetry, balance):
     ]
 
 
-def _record_dict(rid, created_at, symmetry, balance, image_filename):
+def _record_dict(rid, created_at, symmetry, balance, image_filename, care_side=""):
     """이력 한 건을 앱에 돌려줄 형태로 정리합니다."""
     return {
         "id": rid,
         "created_at": created_at,
         "image_url": f"/uploads/{image_filename}",
         "scores": _score_list(symmetry, balance),
+        "care_side": care_side,
     }
 
 
@@ -296,6 +303,7 @@ async def save_scan(file: UploadFile = File(...)):
     created_at = datetime.now().isoformat(timespec="seconds")
     symmetry = res["scores"]["symmetry"]
     balance = res["scores"]["balance"]
+    care_side = res["scores"]["care_side"]
     brightness = res["skin"]["brightness"]
     redness = res["skin"]["redness"]
 
@@ -303,10 +311,10 @@ async def save_scan(file: UploadFile = File(...)):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, image_filename)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, image_filename)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (created_at, symmetry, balance, brightness, redness, filename),
+        (created_at, symmetry, balance, brightness, redness, care_side, filename),
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -318,7 +326,7 @@ async def save_scan(file: UploadFile = File(...)):
         "landmark_count": res["landmark_count"],
         "image_size": {"width": res["width"], "height": res["height"]},
         "landmarks": res["landmarks"],
-        "record": _record_dict(new_id, created_at, symmetry, balance, filename),
+        "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side),
     }
 
 
@@ -327,7 +335,7 @@ async def save_scan(file: UploadFile = File(...)):
 def get_history():
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute(
-        "SELECT id, created_at, symmetry, balance, image_filename FROM scans ORDER BY id DESC"
+        "SELECT id, created_at, symmetry, balance, image_filename, care_side FROM scans ORDER BY id DESC"
     ).fetchall()
     conn.close()
     records = [_record_dict(*row) for row in rows]
