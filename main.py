@@ -306,8 +306,8 @@ def _detect_and_score(raw):
 
     skin = _compute_skin_tone(image, face, width, height)
     signature = _compute_signature(face, width, height)
-    # 화면에 점을 찍을 수 있도록 좌표(0~1 비율)를 함께 담습니다. (2D 표시용이라 x, y만)
-    landmarks = [{"x": round(p.x, 4), "y": round(p.y, 4)} for p in face]
+    # 화면 표시용 좌표. x, y는 0~1 비율, z는 상대 깊이(간이 3D 표시에 사용).
+    landmarks = [{"x": round(p.x, 4), "y": round(p.y, 4), "z": round(p.z, 4)} for p in face]
     return {
         "detected": True,
         "width": width,
