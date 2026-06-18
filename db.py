@@ -10,7 +10,8 @@ import os
 import sqlite3
 
 # 배포 환경에서 설정하는 PostgreSQL 접속 주소입니다. (없으면 로컬 SQLite 사용)
-DATABASE_URL = os.environ.get("DATABASE_URL")
+# 비밀값을 붙여넣을 때 끝에 줄바꿈/공백이 섞여 들어가는 경우가 많아 정리합니다.
+DATABASE_URL = (os.environ.get("DATABASE_URL") or "").strip() or None
 USE_PG = bool(DATABASE_URL)
 
 BASE_DIR = os.path.dirname(__file__)
