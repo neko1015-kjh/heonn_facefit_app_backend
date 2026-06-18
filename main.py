@@ -123,6 +123,14 @@ def _init_db():
         )
         """
     )
+    # PostgreSQL: 기존 테이블에 나중에 추가된 컬럼이 없을 수 있으니 보강합니다.
+    # (PostgreSQL은 ADD COLUMN IF NOT EXISTS 를 지원하므로 안전하게 추가됩니다)
+    if db.USE_PG:
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS care_side TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS signature TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE detections ADD COLUMN IF NOT EXISTS duration_ms INTEGER DEFAULT 0")
     conn.commit()
     conn.close()
 
