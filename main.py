@@ -14,7 +14,7 @@ import numpy as np
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -70,6 +70,33 @@ def _init_db():
         conn.execute("ALTER TABLE scans ADD COLUMN care_side TEXT DEFAULT ''")
     if "signature" not in existing:
         conn.execute("ALTER TABLE scans ADD COLUMN signature TEXT DEFAULT ''")
+    if "user_id" not in existing:
+        conn.execute("ALTER TABLE scans ADD COLUMN user_id INTEGER DEFAULT 0")
+
+    # 사용자 계정 표 (간단 세션 토큰 방식)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,    -- 로그인 토큰(기기에 저장)
+            provider TEXT,                 -- 카카오/네이버/구글 등
+            display_name TEXT,             -- 표시 이름
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+    # 랜드마크 검출 측정 표 (성공률 baseline 산출용)
+    # 분석 시도가 일어날 때마다 얼굴 검출 성공/실패를 한 줄씩 기록합니다.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS detections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,      -- 검출 시각
+            success INTEGER NOT NULL,      -- 1=검출 성공, 0=실패
+            reason TEXT DEFAULT ''         -- 성공/실패 사유
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -112,6 +139,56 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+# ─────────────────────────────────────────────────────────────
+# 로그인 / 사용자 (간단 토큰 세션)
+# ─────────────────────────────────────────────────────────────
+def _current_user_id(authorization: str | None):
+    """요청 헤더의 토큰으로 현재 사용자 id를 찾습니다. 없으면 None."""
+    if not authorization:
+        return None
+    token = authorization.replace("Bearer ", "").strip()
+    if not token:
+        return None
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT id FROM users WHERE token = ?", (token,)).fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+# 로그인: 소셜 버튼을 누르면 사용자를 만들고 토큰을 발급합니다.
+@app.post("/auth/login")
+def auth_login(payload: dict):
+    provider = (payload or {}).get("provider", "guest")
+    name = (payload or {}).get("name") or f"{provider} 사용자"
+    token = uuid.uuid4().hex
+    created_at = datetime.now().isoformat(timespec="seconds")
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        "INSERT INTO users (token, provider, display_name, created_at) VALUES (?, ?, ?, ?)",
+        (token, provider, name, created_at),
+    )
+    conn.commit()
+    uid = cur.lastrowid
+    conn.close()
+    return {"token": token, "user": {"id": uid, "provider": provider, "display_name": name}}
+
+
+# 저장된 토큰으로 로그인 상태를 확인합니다(자동 로그인).
+@app.get("/auth/me")
+def auth_me(authorization: str = Header(None)):
+    if not authorization:
+        return {"authenticated": False}
+    token = authorization.replace("Bearer ", "").strip()
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT id, provider, display_name FROM users WHERE token = ?", (token,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return {"authenticated": False}
+    return {"authenticated": True, "user": {"id": row[0], "provider": row[1], "display_name": row[2]}}
 
 
 # [실제 AI 기능 1단계] 얼굴 랜드마크 검출 주소입니다. ("/scan/landmarks")
@@ -290,10 +367,26 @@ def _signature_distance(a, b):
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
+def _log_detection(success, reason=""):
+    """얼굴 랜드마크 검출 시도 한 건을 측정용으로 기록합니다(성공률 baseline 산출)."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "INSERT INTO detections (created_at, success, reason) VALUES (?, ?, ?)",
+            (datetime.now().isoformat(timespec="seconds"), 1 if success else 0, reason),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        # 측정 기록 실패는 분석 자체를 막지 않도록 조용히 넘어갑니다.
+        pass
+
+
 def _detect_and_score(raw):
     """사진 데이터(raw)를 받아 얼굴을 검출하고 점수·피부톤을 계산합니다."""
     image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
+        # 이미지 자체를 못 읽은 경우는 '검출 대상'이 아니므로 측정에서 제외합니다.
         return {"detected": False, "message": "이미지를 읽을 수 없습니다. 올바른 사진 파일인지 확인해 주세요."}
 
     height, width = image.shape[:2]
@@ -301,11 +394,15 @@ def _detect_and_score(raw):
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
     result = face_landmarker.detect(mp_image)
     if not result.face_landmarks:
+        # 얼굴 랜드마크를 찾지 못함 → 검출 실패로 기록
+        _log_detection(False, "얼굴 미검출")
         return {
             "detected": False,
             "message": "얼굴 사진이 아니거나 얼굴을 찾지 못했습니다. 얼굴이 정면으로 잘 보이는 사진을 사용해 주세요.",
         }
 
+    # 얼굴 랜드마크 검출 성공 → 성공으로 기록 (품질 검사와 무관하게 '검출'은 성공)
+    _log_detection(True, "검출 성공")
     face = result.face_landmarks[0]
 
     # 정확한 정면 얼굴인지 품질 검사
@@ -379,7 +476,10 @@ async def analyze_face(file: UploadFile = File(...)):
 
 # 사진을 분석하고 그 결과(사진 + 점수)를 이력으로 저장합니다. ("/history/scan")
 @app.post("/history/scan")
-async def save_scan(file: UploadFile = File(...)):
+async def save_scan(file: UploadFile = File(...), authorization: str = Header(None)):
+    user_id = _current_user_id(authorization)
+    if not user_id:
+        return {"detected": False, "message": "로그인이 필요합니다."}
     raw = await file.read()
     res = _detect_and_score(raw)
     if not res["detected"]:
@@ -398,14 +498,14 @@ async def save_scan(file: UploadFile = File(...)):
     redness = res["skin"]["redness"]
     signature_json = json.dumps(res["signature"])
 
-    # 데이터베이스에 기록을 추가합니다.
+    # 데이터베이스에 기록을 추가합니다. (로그인한 사용자에 귀속)
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, image_filename)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, image_filename, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, filename),
+        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, filename, user_id),
     )
     conn.commit()
     new_id = cur.lastrowid
@@ -421,12 +521,19 @@ async def save_scan(file: UploadFile = File(...)):
     }
 
 
-# 저장된 모든 이력을 최신순으로 돌려줍니다. ("/history")
+# 저장된 이력을 최신순으로 돌려줍니다. (로그인한 사용자의 기록만)
 @app.get("/history")
-def get_history():
+def get_history(authorization: str = Header(None)):
+    user_id = _current_user_id(authorization)
+    if not user_id:
+        return {"count": 0, "records": []}
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute(
-        "SELECT id, created_at, symmetry, balance, image_filename, care_side, signature FROM scans ORDER BY id DESC"
+        """
+        SELECT id, created_at, symmetry, balance, image_filename, care_side, signature
+        FROM scans WHERE user_id = ? ORDER BY id DESC
+        """,
+        (user_id,),
     ).fetchall()
     conn.close()
     records = [_record_dict(*row) for row in rows]
@@ -515,17 +622,21 @@ def _tone_labels(brightness, redness):
     return tone, red
 
 
-# 가장 최근 분석 결과를 바탕으로 맞춤 추천을 돌려줍니다. ("/recommendations")
+# 가장 최근 분석 결과를 바탕으로 맞춤 추천을 돌려줍니다. (로그인 사용자 기준)
 @app.get("/recommendations")
-def get_recommendations():
-    conn = sqlite3.connect(DB_PATH)
-    row = conn.execute(
-        """
-        SELECT symmetry, balance, skin_brightness, skin_redness
-        FROM scans ORDER BY id DESC LIMIT 1
-        """
-    ).fetchone()
-    conn.close()
+def get_recommendations(authorization: str = Header(None)):
+    user_id = _current_user_id(authorization)
+    row = None
+    if user_id:
+        conn = sqlite3.connect(DB_PATH)
+        row = conn.execute(
+            """
+            SELECT symmetry, balance, skin_brightness, skin_redness
+            FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+        conn.close()
 
     # 아직 분석 기록이 없으면 기본 추천(전체 제품)을 돌려줍니다.
     if row is None:
@@ -549,4 +660,49 @@ def get_recommendations():
             "skin_redness": red,
         },
         "products": _build_recommendations(symmetry, balance, brightness, redness),
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# [측정 지표] 랜드마크 검출 성공률 (PoC 검증 표의 baseline 산출용)
+# 지금까지 분석을 시도한 사진들 중 얼굴 검출에 성공한 비율(%)을 돌려줍니다.
+# ─────────────────────────────────────────────────────────────
+@app.get("/metrics/landmark")
+def landmark_metrics():
+    conn = sqlite3.connect(DB_PATH)
+    total = conn.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
+    success = conn.execute("SELECT COUNT(*) FROM detections WHERE success = 1").fetchone()[0]
+    conn.close()
+    # 측정 기록이 하나도 없으면 0%로 표시합니다(아직 분석한 사진이 없음).
+    success_rate = round(success / total * 100, 1) if total else 0.0
+    return {
+        "metric": "landmark_detection_success_rate",
+        "total_attempts": total,   # 분석 시도(검출 대상) 총 횟수
+        "success_count": success,  # 얼굴 검출 성공 횟수
+        "success_rate": success_rate,  # 검출 성공률(%)
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# [측정 지표] 재사용률 (PoC 검증 표 ❸의 baseline 산출용)
+# 분석을 1회 이상 한 로그인 사용자 중, 2회 이상 분석한 사용자의 비율(%)입니다.
+# (다시 돌아와 사용한 사람의 비율 = 리텐션의 가장 간단한 측정)
+# ─────────────────────────────────────────────────────────────
+@app.get("/metrics/retention")
+def retention_metrics():
+    conn = sqlite3.connect(DB_PATH)
+    # 로그인 사용자(user_id > 0)별 분석 횟수를 셉니다. (레거시 0번 기록은 제외)
+    rows = conn.execute(
+        "SELECT user_id, COUNT(*) FROM scans WHERE user_id > 0 GROUP BY user_id"
+    ).fetchall()
+    conn.close()
+    active_users = len(rows)  # 분석을 1회 이상 한 사용자 수
+    returning_users = sum(1 for _, cnt in rows if cnt >= 2)  # 2회 이상 분석한 사용자 수
+    # 활성 사용자가 없으면 0%로 표시합니다.
+    reuse_rate = round(returning_users / active_users * 100, 1) if active_users else 0.0
+    return {
+        "metric": "reuse_rate",
+        "active_users": active_users,        # 분석 1회 이상 사용자 수
+        "returning_users": returning_users,  # 2회 이상 분석 사용자 수
+        "reuse_rate": reuse_rate,            # 재사용률(%)
     }
