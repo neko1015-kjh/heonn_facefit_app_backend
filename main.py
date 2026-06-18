@@ -6,9 +6,10 @@ import math
 import json
 import time
 import uuid
-import sqlite3
 import urllib.request
 from datetime import datetime
+
+import db  # DB 연결 도우미 (환경에 따라 PostgreSQL/SQLite 자동 선택)
 
 import cv2
 import numpy as np
@@ -41,44 +42,49 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # 저장된 사진을 앱에서 볼 수 있도록 "/uploads" 주소로 공개합니다.
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-# 사용 이력을 저장할 데이터베이스 파일입니다. (SQLite — 파일 하나로 동작)
-DB_PATH = os.path.join(BASE_DIR, "facefit.db")
+# 사용 이력은 db.py를 통해 저장합니다.
+# (배포 환경: PostgreSQL / 로컬 개발: SQLite 파일 — db.py가 자동 선택)
 
 
 def _init_db():
     """서버가 켜질 때 이력 저장용 표(table)를 준비합니다."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
+    # 분석 기록 표 (전체 컬럼 포함 — 새 DB에서는 이 한 번으로 완성됩니다)
     conn.execute(
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS scans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {db.PK},
             created_at TEXT NOT NULL,        -- 분석한 시각
             symmetry INTEGER NOT NULL,       -- 안면 비대칭 점수
             balance INTEGER NOT NULL,        -- 좌우 균형(부기) 점수
             skin_brightness INTEGER DEFAULT 0,  -- 피부 밝기(0~255)
             skin_redness INTEGER DEFAULT 0,     -- 피부 붉은기
+            care_side TEXT DEFAULT '',          -- 케어가 더 필요한 쪽
+            signature TEXT DEFAULT '',          -- 동일인 판별용 얼굴 서명
+            user_id INTEGER DEFAULT 0,          -- 분석한 사용자(없으면 0)
             image_filename TEXT NOT NULL     -- 저장된 사진 파일 이름
         )
         """
     )
-    # 예전 버전 DB에 피부톤 컬럼이 없으면 추가합니다(자동 마이그레이션).
-    existing = [row[1] for row in conn.execute("PRAGMA table_info(scans)").fetchall()]
-    if "skin_brightness" not in existing:
-        conn.execute("ALTER TABLE scans ADD COLUMN skin_brightness INTEGER DEFAULT 0")
-    if "skin_redness" not in existing:
-        conn.execute("ALTER TABLE scans ADD COLUMN skin_redness INTEGER DEFAULT 0")
-    if "care_side" not in existing:
-        conn.execute("ALTER TABLE scans ADD COLUMN care_side TEXT DEFAULT ''")
-    if "signature" not in existing:
-        conn.execute("ALTER TABLE scans ADD COLUMN signature TEXT DEFAULT ''")
-    if "user_id" not in existing:
-        conn.execute("ALTER TABLE scans ADD COLUMN user_id INTEGER DEFAULT 0")
+    # 예전 버전(SQLite) DB에 컬럼이 없으면 추가합니다. (PostgreSQL은 위 CREATE로 완성)
+    if not db.USE_PG:
+        existing = [row[1] for row in conn.execute("PRAGMA table_info(scans)").fetchall()]
+        if "skin_brightness" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN skin_brightness INTEGER DEFAULT 0")
+        if "skin_redness" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN skin_redness INTEGER DEFAULT 0")
+        if "care_side" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN care_side TEXT DEFAULT ''")
+        if "signature" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN signature TEXT DEFAULT ''")
+        if "user_id" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN user_id INTEGER DEFAULT 0")
 
     # 사용자 계정 표 (간단 세션 토큰 방식)
     conn.execute(
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {db.PK},
             token TEXT UNIQUE NOT NULL,    -- 로그인 토큰(기기에 저장)
             provider TEXT,                 -- 카카오/네이버/구글 등
             display_name TEXT,             -- 표시 이름
@@ -86,12 +92,11 @@ def _init_db():
         )
         """
     )
-    # 랜드마크 검출 측정 표 (성공률 baseline 산출용)
-    # 분석 시도가 일어날 때마다 얼굴 검출 성공/실패를 한 줄씩 기록합니다.
+    # 랜드마크 검출 측정 표 (성공률·처리 시간 baseline 산출용)
     conn.execute(
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS detections (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {db.PK},
             created_at TEXT NOT NULL,      -- 검출 시각
             success INTEGER NOT NULL,      -- 1=검출 성공, 0=실패
             reason TEXT DEFAULT '',        -- 성공/실패 사유
@@ -99,16 +104,16 @@ def _init_db():
         )
         """
     )
-    # 예전 버전 detections 표에 처리 시간 컬럼이 없으면 추가합니다(자동 마이그레이션).
-    det_cols = [row[1] for row in conn.execute("PRAGMA table_info(detections)").fetchall()]
-    if "duration_ms" not in det_cols:
-        conn.execute("ALTER TABLE detections ADD COLUMN duration_ms INTEGER DEFAULT 0")
+    # 예전 버전(SQLite) detections 표에 처리 시간 컬럼이 없으면 추가합니다.
+    if not db.USE_PG:
+        det_cols = [row[1] for row in conn.execute("PRAGMA table_info(detections)").fetchall()]
+        if "duration_ms" not in det_cols:
+            conn.execute("ALTER TABLE detections ADD COLUMN duration_ms INTEGER DEFAULT 0")
     # 만족도(CSAT) 측정 표
-    # 사용자가 분석/케어가 도움이 됐는지 평가한 결과를 한 줄씩 기록합니다.
     conn.execute(
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS feedback (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {db.PK},
             created_at TEXT NOT NULL,      -- 평가 시각
             user_id INTEGER DEFAULT 0,     -- 평가한 사용자(없으면 0)
             satisfied INTEGER NOT NULL     -- 1=만족(도움됨), 0=불만족
@@ -169,7 +174,7 @@ def _current_user_id(authorization: str | None):
     token = authorization.replace("Bearer ", "").strip()
     if not token:
         return None
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
     row = conn.execute("SELECT id FROM users WHERE token = ?", (token,)).fetchone()
     conn.close()
     return row[0] if row else None
@@ -182,13 +187,14 @@ def auth_login(payload: dict):
     name = (payload or {}).get("name") or f"{provider} 사용자"
     token = uuid.uuid4().hex
     created_at = datetime.now().isoformat(timespec="seconds")
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
+    # RETURNING id 는 SQLite(3.35+)와 PostgreSQL 양쪽에서 새 id를 돌려줍니다.
     cur = conn.execute(
-        "INSERT INTO users (token, provider, display_name, created_at) VALUES (?, ?, ?, ?)",
+        "INSERT INTO users (token, provider, display_name, created_at) VALUES (?, ?, ?, ?) RETURNING id",
         (token, provider, name, created_at),
     )
+    uid = cur.fetchone()[0]
     conn.commit()
-    uid = cur.lastrowid
     conn.close()
     return {"token": token, "user": {"id": uid, "provider": provider, "display_name": name}}
 
@@ -199,7 +205,7 @@ def auth_me(authorization: str = Header(None)):
     if not authorization:
         return {"authenticated": False}
     token = authorization.replace("Bearer ", "").strip()
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
     row = conn.execute(
         "SELECT id, provider, display_name FROM users WHERE token = ?", (token,)
     ).fetchone()
@@ -388,7 +394,7 @@ def _signature_distance(a, b):
 def _log_detection(success, reason="", duration_ms=0):
     """얼굴 랜드마크 검출 시도 한 건을 측정용으로 기록합니다(성공률·처리 시간 baseline 산출)."""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = db.connect()
         conn.execute(
             "INSERT INTO detections (created_at, success, reason, duration_ms) VALUES (?, ?, ?, ?)",
             (datetime.now().isoformat(timespec="seconds"), 1 if success else 0, reason, int(duration_ms)),
@@ -520,16 +526,16 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     signature_json = json.dumps(res["signature"])
 
     # 데이터베이스에 기록을 추가합니다. (로그인한 사용자에 귀속)
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
     cur = conn.execute(
         """
         INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, image_filename, user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
         """,
         (created_at, symmetry, balance, brightness, redness, care_side, signature_json, filename, user_id),
     )
+    new_id = cur.fetchone()[0]
     conn.commit()
-    new_id = cur.lastrowid
     conn.close()
 
     return {
@@ -548,7 +554,7 @@ def get_history(authorization: str = Header(None)):
     user_id = _current_user_id(authorization)
     if not user_id:
         return {"count": 0, "records": []}
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
     rows = conn.execute(
         """
         SELECT id, created_at, symmetry, balance, image_filename, care_side, signature
@@ -649,7 +655,7 @@ def get_recommendations(authorization: str = Header(None)):
     user_id = _current_user_id(authorization)
     row = None
     if user_id:
-        conn = sqlite3.connect(DB_PATH)
+        conn = db.connect()
         row = conn.execute(
             """
             SELECT symmetry, balance, skin_brightness, skin_redness
@@ -690,7 +696,7 @@ def get_recommendations(authorization: str = Header(None)):
 # ─────────────────────────────────────────────────────────────
 @app.get("/metrics/landmark")
 def landmark_metrics():
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
     total = conn.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
     success = conn.execute("SELECT COUNT(*) FROM detections WHERE success = 1").fetchone()[0]
     conn.close()
@@ -711,7 +717,7 @@ def landmark_metrics():
 # ─────────────────────────────────────────────────────────────
 @app.get("/metrics/retention")
 def retention_metrics():
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
     # 로그인 사용자(user_id > 0)별 분석 횟수를 셉니다. (레거시 0번 기록은 제외)
     rows = conn.execute(
         "SELECT user_id, COUNT(*) FROM scans WHERE user_id > 0 GROUP BY user_id"
@@ -734,7 +740,7 @@ def retention_metrics():
 def submit_feedback(payload: dict, authorization: str = Header(None)):
     user_id = _current_user_id(authorization) or 0
     satisfied = 1 if (payload or {}).get("satisfied") else 0
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
     conn.execute(
         "INSERT INTO feedback (created_at, user_id, satisfied) VALUES (?, ?, ?)",
         (datetime.now().isoformat(timespec="seconds"), user_id, satisfied),
@@ -750,7 +756,7 @@ def submit_feedback(payload: dict, authorization: str = Header(None)):
 # ─────────────────────────────────────────────────────────────
 @app.get("/metrics/csat")
 def csat_metrics():
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
     total = conn.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]
     satisfied = conn.execute("SELECT COUNT(*) FROM feedback WHERE satisfied = 1").fetchone()[0]
     conn.close()
@@ -770,13 +776,14 @@ def csat_metrics():
 # ─────────────────────────────────────────────────────────────
 @app.get("/metrics/latency")
 def latency_metrics():
-    conn = sqlite3.connect(DB_PATH)
+    conn = db.connect()
     row = conn.execute(
         "SELECT COUNT(*), AVG(duration_ms) FROM detections WHERE success = 1 AND duration_ms > 0"
     ).fetchone()
     conn.close()
     count = row[0] or 0
-    avg_ms = round(row[1], 1) if row[1] else 0.0
+    # PostgreSQL의 AVG는 Decimal을 돌려주므로 float으로 변환해 통일합니다.
+    avg_ms = round(float(row[1]), 1) if row[1] else 0.0
     # 처리 시간으로 환산한 초당 처리 장수(참고용). 시간이 0이면 0으로 둡니다.
     approx_fps = round(1000.0 / avg_ms, 1) if avg_ms > 0 else 0.0
     return {
