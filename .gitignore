@@ -11,6 +11,8 @@ __pycache__/
 
 # AI 모델 파일 (용량이 커서 제외 — main.py의 주소에서 내려받으세요)
 *.task
+*.caffemodel
+*.prototxt
 
 # 사용 이력 데이터베이스 및 업로드된 사진 (사용자 데이터라 제외)
 *.db

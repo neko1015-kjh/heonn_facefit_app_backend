@@ -61,6 +61,7 @@ def _init_db():
             skin_redness INTEGER DEFAULT 0,     -- 피부 붉은기
             care_side TEXT DEFAULT '',          -- 케어가 더 필요한 쪽
             signature TEXT DEFAULT '',          -- 동일인 판별용 얼굴 서명
+            gender TEXT DEFAULT '',             -- 추정 성별(동일인 판별 보조)
             user_id INTEGER DEFAULT 0,          -- 분석한 사용자(없으면 0)
             image_filename TEXT NOT NULL     -- 저장된 사진 파일 이름
         )
@@ -77,6 +78,8 @@ def _init_db():
             conn.execute("ALTER TABLE scans ADD COLUMN care_side TEXT DEFAULT ''")
         if "signature" not in existing:
             conn.execute("ALTER TABLE scans ADD COLUMN signature TEXT DEFAULT ''")
+        if "gender" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN gender TEXT DEFAULT ''")
         if "user_id" not in existing:
             conn.execute("ALTER TABLE scans ADD COLUMN user_id INTEGER DEFAULT 0")
 
@@ -149,6 +152,52 @@ _landmarker_options = vision.FaceLandmarkerOptions(
 )
 # 검출기는 서버가 켜질 때 한 번만 만들어 재사용합니다(빠른 응답을 위해).
 face_landmarker = vision.FaceLandmarker.create_from_options(_landmarker_options)
+
+# 성별 추정 모델(OpenCV용 Caffe)도 준비합니다. 없으면 자동으로 내려받습니다.
+# (동일인 판별의 보조 신호로 사용 — 성별 추정은 100% 정확하지 않음에 유의)
+GENDER_PROTO_URL = "https://github.com/smahesh29/Gender-and-Age-Detection/raw/master/gender_deploy.prototxt"
+GENDER_MODEL_URL = "https://github.com/smahesh29/Gender-and-Age-Detection/raw/master/gender_net.caffemodel"
+GENDER_PROTO_PATH = os.path.join(BASE_DIR, "gender_deploy.prototxt")
+GENDER_MODEL_PATH = os.path.join(BASE_DIR, "gender_net.caffemodel")
+GENDER_LIST = ["Male", "Female"]  # 모델 출력 순서
+GENDER_MEAN = (78.4263377603, 87.7689143744, 114.895847746)  # 모델 학습 시 평균값
+
+gender_net = None
+try:
+    if not os.path.exists(GENDER_PROTO_PATH):
+        print("성별 모델(구조) 다운로드 중...")
+        urllib.request.urlretrieve(GENDER_PROTO_URL, GENDER_PROTO_PATH)
+    if not os.path.exists(GENDER_MODEL_PATH):
+        print("성별 모델(가중치) 다운로드 중...")
+        urllib.request.urlretrieve(GENDER_MODEL_URL, GENDER_MODEL_PATH)
+    gender_net = cv2.dnn.readNetFromCaffe(GENDER_PROTO_PATH, GENDER_MODEL_PATH)
+    print("성별 모델 준비 완료")
+except Exception as e:
+    # 성별 모델 로드 실패해도 서버는 정상 동작(성별 추정만 비활성).
+    print("성별 모델 준비 실패(성별 추정 비활성):", e)
+    gender_net = None
+
+
+def _estimate_gender(image, face, w, h):
+    """얼굴 영역을 잘라 성별('Male'/'Female')을 추정합니다. 실패 시 ''."""
+    if gender_net is None:
+        return ""
+    xs = [p.x for p in face]
+    ys = [p.y for p in face]
+    x1 = max(0, int(min(xs) * w))
+    x2 = min(w, int(max(xs) * w))
+    y1 = max(0, int(min(ys) * h))
+    y2 = min(h, int(max(ys) * h))
+    crop = image[y1:y2, x1:x2]
+    if crop.size == 0:
+        return ""
+    try:
+        blob = cv2.dnn.blobFromImage(crop, 1.0, (227, 227), GENDER_MEAN, swapRB=False)
+        gender_net.setInput(blob)
+        pred = gender_net.forward()
+        return GENDER_LIST[int(pred[0].argmax())]
+    except Exception:
+        return ""
 
 
 # ─────────────────────────────────────────────────────────────
@@ -448,6 +497,7 @@ def _detect_and_score(raw):
 
     skin = _compute_skin_tone(image, face, width, height)
     signature = _compute_signature(face, width, height)
+    gender = _estimate_gender(image, face, width, height)
     # 화면 표시용 좌표. x, y는 0~1 비율, z는 상대 깊이(간이 3D 표시에 사용).
     landmarks = [{"x": round(p.x, 4), "y": round(p.y, 4), "z": round(p.z, 4)} for p in face]
     return {
@@ -457,6 +507,7 @@ def _detect_and_score(raw):
         "scores": scores,
         "skin": skin,
         "signature": signature,
+        "gender": gender,
         "landmark_count": len(face),
         "landmarks": landmarks,
     }
@@ -517,20 +568,32 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     if not res["detected"]:
         return res  # 얼굴을 못 찾으면 저장하지 않음
 
-    # 직전에 분석한 내 사진과 '같은 사람'인지 얼굴 특징으로 확인합니다.
+    # 직전에 분석한 내 사진과 '같은 사람'인지 확인합니다.
+    # ① 얼굴 특징(signature) 거리 ② 추정 성별(보조) — 둘 중 하나라도 다르면 다른 사람으로 봅니다.
+    cur_gender = res.get("gender", "")
     conn = db.connect()
     prev = conn.execute(
-        "SELECT signature FROM scans WHERE user_id = ? AND signature != '' ORDER BY id DESC LIMIT 1",
+        "SELECT signature, gender FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1",
         (user_id,),
     ).fetchone()
     conn.close()
-    if prev and prev[0]:
-        try:
-            prev_sig = json.loads(prev[0])
-        except (ValueError, TypeError):
-            prev_sig = []
-        dist = _signature_distance(res["signature"], prev_sig)
-        if dist is not None and dist > SIG_THRESHOLD:
+    if prev:
+        prev_sig_json, prev_gender = prev[0], prev[1]
+        # ① 얼굴 특징 비교
+        if prev_sig_json:
+            try:
+                prev_sig = json.loads(prev_sig_json)
+            except (ValueError, TypeError):
+                prev_sig = []
+            dist = _signature_distance(res["signature"], prev_sig)
+            if dist is not None and dist > SIG_THRESHOLD:
+                return {
+                    "detected": False,
+                    "different_person": True,
+                    "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
+                }
+        # ② 성별 비교 (둘 다 추정됐고 서로 다를 때만)
+        if prev_gender and cur_gender and prev_gender != cur_gender:
             return {
                 "detected": False,
                 "different_person": True,
@@ -554,10 +617,10 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     conn = db.connect()
     cur = conn.execute(
         """
-        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, image_filename, user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, gender, image_filename, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
         """,
-        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, filename, user_id),
+        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, cur_gender, filename, user_id),
     )
     new_id = cur.fetchone()[0]
     conn.commit()
