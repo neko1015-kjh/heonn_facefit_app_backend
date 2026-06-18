@@ -4,6 +4,7 @@
 import os
 import math
 import json
+import time
 import uuid
 import sqlite3
 import urllib.request
@@ -93,7 +94,24 @@ def _init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TEXT NOT NULL,      -- 검출 시각
             success INTEGER NOT NULL,      -- 1=검출 성공, 0=실패
-            reason TEXT DEFAULT ''         -- 성공/실패 사유
+            reason TEXT DEFAULT '',        -- 성공/실패 사유
+            duration_ms INTEGER DEFAULT 0  -- 분석 처리 시간(밀리초)
+        )
+        """
+    )
+    # 예전 버전 detections 표에 처리 시간 컬럼이 없으면 추가합니다(자동 마이그레이션).
+    det_cols = [row[1] for row in conn.execute("PRAGMA table_info(detections)").fetchall()]
+    if "duration_ms" not in det_cols:
+        conn.execute("ALTER TABLE detections ADD COLUMN duration_ms INTEGER DEFAULT 0")
+    # 만족도(CSAT) 측정 표
+    # 사용자가 분석/케어가 도움이 됐는지 평가한 결과를 한 줄씩 기록합니다.
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,      -- 평가 시각
+            user_id INTEGER DEFAULT 0,     -- 평가한 사용자(없으면 0)
+            satisfied INTEGER NOT NULL     -- 1=만족(도움됨), 0=불만족
         )
         """
     )
@@ -367,13 +385,13 @@ def _signature_distance(a, b):
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
-def _log_detection(success, reason=""):
-    """얼굴 랜드마크 검출 시도 한 건을 측정용으로 기록합니다(성공률 baseline 산출)."""
+def _log_detection(success, reason="", duration_ms=0):
+    """얼굴 랜드마크 검출 시도 한 건을 측정용으로 기록합니다(성공률·처리 시간 baseline 산출)."""
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute(
-            "INSERT INTO detections (created_at, success, reason) VALUES (?, ?, ?)",
-            (datetime.now().isoformat(timespec="seconds"), 1 if success else 0, reason),
+            "INSERT INTO detections (created_at, success, reason, duration_ms) VALUES (?, ?, ?, ?)",
+            (datetime.now().isoformat(timespec="seconds"), 1 if success else 0, reason, int(duration_ms)),
         )
         conn.commit()
         conn.close()
@@ -384,6 +402,8 @@ def _log_detection(success, reason=""):
 
 def _detect_and_score(raw):
     """사진 데이터(raw)를 받아 얼굴을 검출하고 점수·피부톤을 계산합니다."""
+    # 처리 시간 측정 시작 (사진 1장 분석에 걸리는 시간 = fps 대체 지표)
+    t0 = time.perf_counter()
     image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
         # 이미지 자체를 못 읽은 경우는 '검출 대상'이 아니므로 측정에서 제외합니다.
@@ -393,6 +413,7 @@ def _detect_and_score(raw):
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
     result = face_landmarker.detect(mp_image)
+    elapsed_ms = (time.perf_counter() - t0) * 1000  # 검출까지 걸린 시간(ms)
     if not result.face_landmarks:
         # 얼굴 랜드마크를 찾지 못함 → 검출 실패로 기록
         _log_detection(False, "얼굴 미검출")
@@ -401,8 +422,8 @@ def _detect_and_score(raw):
             "message": "얼굴 사진이 아니거나 얼굴을 찾지 못했습니다. 얼굴이 정면으로 잘 보이는 사진을 사용해 주세요.",
         }
 
-    # 얼굴 랜드마크 검출 성공 → 성공으로 기록 (품질 검사와 무관하게 '검출'은 성공)
-    _log_detection(True, "검출 성공")
+    # 얼굴 랜드마크 검출 성공 → 성공 + 처리 시간 기록 (품질 검사와 무관하게 '검출'은 성공)
+    _log_detection(True, "검출 성공", elapsed_ms)
     face = result.face_landmarks[0]
 
     # 정확한 정면 얼굴인지 품질 검사
@@ -705,4 +726,62 @@ def retention_metrics():
         "active_users": active_users,        # 분석 1회 이상 사용자 수
         "returning_users": returning_users,  # 2회 이상 분석 사용자 수
         "reuse_rate": reuse_rate,            # 재사용률(%)
+    }
+
+
+# 만족도 평가 제출: 사용자가 분석/케어가 도움이 됐는지 평가합니다.
+@app.post("/feedback")
+def submit_feedback(payload: dict, authorization: str = Header(None)):
+    user_id = _current_user_id(authorization) or 0
+    satisfied = 1 if (payload or {}).get("satisfied") else 0
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO feedback (created_at, user_id, satisfied) VALUES (?, ?, ?)",
+        (datetime.now().isoformat(timespec="seconds"), user_id, satisfied),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────
+# [측정 지표] 만족도(CSAT) (PoC 검증 표 ❸의 baseline 산출용)
+# 만족도 평가 중 '만족(도움됨)'으로 응답한 비율(%)입니다.
+# ─────────────────────────────────────────────────────────────
+@app.get("/metrics/csat")
+def csat_metrics():
+    conn = sqlite3.connect(DB_PATH)
+    total = conn.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]
+    satisfied = conn.execute("SELECT COUNT(*) FROM feedback WHERE satisfied = 1").fetchone()[0]
+    conn.close()
+    # 평가가 하나도 없으면 0%로 표시합니다.
+    csat = round(satisfied / total * 100, 1) if total else 0.0
+    return {
+        "metric": "csat",
+        "total_responses": total,      # 전체 평가 수
+        "satisfied_count": satisfied,  # 만족 응답 수
+        "csat": csat,                  # 만족도(%)
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# [측정 지표] 분석 처리 시간 (PoC 검증 표 ❶의 fps 대체 baseline)
+# 검출에 성공한 분석들의 평균 처리 시간(ms)입니다. (사진 1장당 소요 시간)
+# ─────────────────────────────────────────────────────────────
+@app.get("/metrics/latency")
+def latency_metrics():
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT COUNT(*), AVG(duration_ms) FROM detections WHERE success = 1 AND duration_ms > 0"
+    ).fetchone()
+    conn.close()
+    count = row[0] or 0
+    avg_ms = round(row[1], 1) if row[1] else 0.0
+    # 처리 시간으로 환산한 초당 처리 장수(참고용). 시간이 0이면 0으로 둡니다.
+    approx_fps = round(1000.0 / avg_ms, 1) if avg_ms > 0 else 0.0
+    return {
+        "metric": "analysis_latency",
+        "sample_count": count,     # 측정에 쓰인 분석 건수
+        "avg_duration_ms": avg_ms, # 평균 처리 시간(ms)
+        "approx_fps": approx_fps,  # 환산 처리량(장/초, 참고용)
     }
