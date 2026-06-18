@@ -4,9 +4,12 @@
 FROM python:3.12-slim
 
 # opencv/mediapipe 실행에 필요한 시스템 라이브러리
+# (libGLESv2 등 그래픽 라이브러리가 없으면 mediapipe가 시작되지 못합니다)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
+    libgles2 \
+    libegl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 일반 사용자로 실행 (Hugging Face Spaces 권장 방식)
