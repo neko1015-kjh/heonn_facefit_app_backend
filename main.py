@@ -391,6 +391,11 @@ def _signature_distance(a, b):
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
 
 
+# 얼굴 서명 거리가 이 값보다 크면 '다른 사람'으로 봅니다.
+# (리포트 화면의 동일인 판별 기준과 동일하게 맞춥니다)
+SIG_THRESHOLD = 0.2
+
+
 def _log_detection(success, reason="", duration_ms=0):
     """얼굴 랜드마크 검출 시도 한 건을 측정용으로 기록합니다(성공률·처리 시간 baseline 산출)."""
     try:
@@ -511,6 +516,26 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     res = _detect_and_score(raw)
     if not res["detected"]:
         return res  # 얼굴을 못 찾으면 저장하지 않음
+
+    # 직전에 분석한 내 사진과 '같은 사람'인지 얼굴 특징으로 확인합니다.
+    conn = db.connect()
+    prev = conn.execute(
+        "SELECT signature FROM scans WHERE user_id = ? AND signature != '' ORDER BY id DESC LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    conn.close()
+    if prev and prev[0]:
+        try:
+            prev_sig = json.loads(prev[0])
+        except (ValueError, TypeError):
+            prev_sig = []
+        dist = _signature_distance(res["signature"], prev_sig)
+        if dist is not None and dist > SIG_THRESHOLD:
+            return {
+                "detected": False,
+                "different_person": True,
+                "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
+            }
 
     # 사진을 고유한 이름으로 저장합니다.
     filename = f"{uuid.uuid4().hex}.jpg"
