@@ -270,6 +270,7 @@ def auth_login(payload: dict):
 # 흐름: 프론트 → /auth/kakao/login → 카카오 인증 → /auth/kakao/callback → 웹으로 토큰 전달
 # ─────────────────────────────────────────────────────────────
 KAKAO_REST_KEY = os.environ.get("KAKAO_REST_KEY", "")
+KAKAO_CLIENT_SECRET = os.environ.get("KAKAO_CLIENT_SECRET", "")  # 카카오 보안 설정이 ON일 때 필요
 KAKAO_REDIRECT_URI = "https://neko1015-facefit-backend.hf.space/auth/kakao/callback"
 WEB_URL = "https://neko1015-heonn-web.static.hf.space"
 
@@ -292,12 +293,16 @@ def kakao_callback(code: str = ""):
         return RedirectResponse(f"{WEB_URL}/?login_error=1")
     try:
         # 1) code → 카카오 access_token
-        token_body = urllib.parse.urlencode({
+        token_params = {
             "grant_type": "authorization_code",
             "client_id": KAKAO_REST_KEY,
             "redirect_uri": KAKAO_REDIRECT_URI,
             "code": code,
-        }).encode()
+        }
+        # 카카오 보안(Client Secret) 설정이 켜져 있으면 시크릿을 함께 보냅니다.
+        if KAKAO_CLIENT_SECRET:
+            token_params["client_secret"] = KAKAO_CLIENT_SECRET
+        token_body = urllib.parse.urlencode(token_params).encode()
         req = urllib.request.Request("https://kauth.kakao.com/oauth/token", data=token_body)
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
         with urllib.request.urlopen(req, timeout=10) as r:
