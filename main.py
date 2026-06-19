@@ -20,7 +20,7 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 from fastapi import FastAPI, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response, HTMLResponse
 
 # FastAPI 앱(서버)을 만듭니다.
 app = FastAPI(title="FaceFit API")
@@ -737,6 +737,54 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
         "landmarks": res["landmarks"],
         "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side, signature_json),
     }
+
+
+# 분석 사진 갤러리 페이지 — 저장된 분석 사진을 모아 봅니다. ("/gallery")
+@app.get("/gallery", response_class=HTMLResponse)
+def gallery():
+    conn = db.connect()
+    rows = conn.execute(
+        """
+        SELECT s.id, s.created_at, s.image_filename, s.symmetry, s.balance, s.gender, u.display_name
+        FROM scans s LEFT JOIN users u ON s.user_id = u.id
+        WHERE s.image_data IS NOT NULL
+        ORDER BY s.id DESC LIMIT 200
+        """
+    ).fetchall()
+    conn.close()
+
+    cards = []
+    for r in rows:
+        rid, created_at, fname, symmetry, balance, gender, name = r
+        who = name or "게스트"
+        cards.append(
+            f'<figure class="card">'
+            f'<img loading="lazy" src="/uploads/{fname}" alt="분석 사진"/>'
+            f'<figcaption><b>{who}</b> · {created_at}<br/>'
+            f'비대칭 {symmetry} · 부기 {balance}{(" · " + gender) if gender else ""}</figcaption>'
+            f'</figure>'
+        )
+    body = "".join(cards) if cards else '<p class="empty">아직 저장된 분석 사진이 없습니다.</p>'
+
+    html = f"""<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>HeOnn FaceFit — 분석 사진 갤러리</title>
+<style>
+  body {{ margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px; }}
+  h1 {{ color:#fbbf24; font-size:22px; text-align:center; }}
+  .sub {{ color:#a1a1aa; font-size:13px; text-align:center; margin-bottom:24px; }}
+  .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; max-width:1100px; margin:0 auto; }}
+  .card {{ background:#18181b; border:1px solid #27272a; border-radius:14px; overflow:hidden; margin:0; }}
+  .card img {{ width:100%; height:200px; object-fit:cover; display:block; background:#27272a; }}
+  figcaption {{ padding:10px 12px; font-size:12px; color:#a1a1aa; line-height:1.5; }}
+  figcaption b {{ color:#f4f4f5; }}
+  .empty {{ text-align:center; color:#71717a; margin-top:60px; }}
+</style></head><body>
+<h1>HeOnn FaceFit — 분석 사진 갤러리</h1>
+<div class="sub">최근 분석 사진 {len(rows)}장 (최신순)</div>
+<div class="grid">{body}</div>
+</body></html>"""
+    return html
 
 
 # 저장된 사진을 DB에서 읽어 돌려줍니다. ("/uploads/{파일명}")
