@@ -8,6 +8,7 @@ import time
 import uuid
 import urllib.parse
 import urllib.request
+import urllib.error
 from datetime import datetime
 
 import db  # DB 연결 도우미 (환경에 따라 PostgreSQL/SQLite 자동 선택)
@@ -333,6 +334,14 @@ def kakao_callback(code: str = ""):
 
         # 4) 웹으로 토큰 전달 (프론트가 URL의 token을 읽어 로그인 처리)
         return RedirectResponse(f"{WEB_URL}/?token={token}")
+    except urllib.error.HTTPError as he:
+        # 카카오가 돌려준 상세 에러 내용을 로그에 남깁니다(원인 진단용).
+        try:
+            detail = he.read().decode("utf-8", "ignore")
+        except Exception:
+            detail = ""
+        print(f"카카오 로그인 실패 {he.code}: {detail}")
+        return RedirectResponse(f"{WEB_URL}/?login_error=1")
     except Exception as e:
         print("카카오 로그인 실패:", e)
         return RedirectResponse(f"{WEB_URL}/?login_error=1")
