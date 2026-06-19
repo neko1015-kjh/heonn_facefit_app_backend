@@ -20,8 +20,7 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 from fastapi import FastAPI, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 
 # FastAPI 앱(서버)을 만듭니다.
 app = FastAPI(title="FaceFit API")
@@ -39,11 +38,8 @@ app.add_middleware(
 # 이 파일이 있는 폴더 경로입니다.
 BASE_DIR = os.path.dirname(__file__)
 
-# 업로드된 얼굴 사진을 저장할 폴더입니다. (없으면 새로 만듭니다.)
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-# 저장된 사진을 앱에서 볼 수 있도록 "/uploads" 주소로 공개합니다.
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+# 분석 사진은 데이터베이스(scans.image_data)에 저장하고 "/uploads/{파일명}" 주소로 돌려줍니다.
+# (예전에는 파일 폴더 + StaticFiles를 썼지만, 서버 재시작 시 사진이 사라져서 DB 저장으로 변경)
 
 # 사용 이력은 db.py를 통해 저장합니다.
 # (배포 환경: PostgreSQL / 로컬 개발: SQLite 파일 — db.py가 자동 선택)
@@ -66,7 +62,8 @@ def _init_db():
             signature TEXT DEFAULT '',          -- 동일인 판별용 얼굴 서명
             gender TEXT DEFAULT '',             -- 추정 성별(동일인 판별 보조)
             user_id INTEGER DEFAULT 0,          -- 분석한 사용자(없으면 0)
-            image_filename TEXT NOT NULL     -- 저장된 사진 파일 이름
+            image_filename TEXT NOT NULL,       -- 사진 식별용 이름
+            image_data {db.BLOB}                -- 사진 바이너리 (영구 저장)
         )
         """
     )
@@ -85,6 +82,8 @@ def _init_db():
             conn.execute("ALTER TABLE scans ADD COLUMN gender TEXT DEFAULT ''")
         if "user_id" not in existing:
             conn.execute("ALTER TABLE scans ADD COLUMN user_id INTEGER DEFAULT 0")
+        if "image_data" not in existing:
+            conn.execute(f"ALTER TABLE scans ADD COLUMN image_data {db.BLOB}")
 
     # 사용자 계정 표 (간단 세션 토큰 방식)
     conn.execute(
@@ -136,6 +135,7 @@ def _init_db():
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE detections ADD COLUMN IF NOT EXISTS duration_ms INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id TEXT DEFAULT ''")
+        conn.execute(f"ALTER TABLE scans ADD COLUMN IF NOT EXISTS image_data {db.BLOB}")
     else:
         ucols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
         if "provider_id" not in ucols:
@@ -704,10 +704,8 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
                 "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
             }
 
-    # 사진을 고유한 이름으로 저장합니다.
+    # 사진 식별용 이름(실제 사진 데이터는 DB에 함께 저장합니다)
     filename = f"{uuid.uuid4().hex}.jpg"
-    with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:
-        f.write(raw)
 
     created_at = datetime.now().isoformat(timespec="seconds")
     symmetry = res["scores"]["symmetry"]
@@ -717,19 +715,20 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     redness = res["skin"]["redness"]
     signature_json = json.dumps(res["signature"])
 
-    # 데이터베이스에 기록을 추가합니다. (로그인한 사용자에 귀속)
+    # 데이터베이스에 기록 + 사진 바이너리를 함께 저장합니다. (재시작해도 사진 유지)
     conn = db.connect()
     cur = conn.execute(
         """
-        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, gender, image_filename, user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, gender, image_filename, user_id, image_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
         """,
-        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, cur_gender, filename, user_id),
+        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, cur_gender, filename, user_id, raw),
     )
     new_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
 
+    # (이미지 서빙 라우트는 아래 get_uploaded_image 에서 처리)
     return {
         "detected": True,
         "message": "분석 결과를 기록에 저장했습니다.",
@@ -738,6 +737,19 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
         "landmarks": res["landmarks"],
         "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side, signature_json),
     }
+
+
+# 저장된 사진을 DB에서 읽어 돌려줍니다. ("/uploads/{파일명}")
+@app.get("/uploads/{filename}")
+def get_uploaded_image(filename: str):
+    conn = db.connect()
+    row = conn.execute(
+        "SELECT image_data FROM scans WHERE image_filename = ?", (filename,)
+    ).fetchone()
+    conn.close()
+    if not row or row[0] is None:
+        return Response(status_code=404)
+    return Response(content=bytes(row[0]), media_type="image/jpeg")
 
 
 # 저장된 이력을 최신순으로 돌려줍니다. (로그인한 사용자의 기록만)

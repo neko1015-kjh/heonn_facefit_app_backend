@@ -20,6 +20,9 @@ SQLITE_PATH = os.path.join(BASE_DIR, "facefit.db")
 # 자동 증가 기본키(PK) 정의 — DB 종류마다 문법이 다릅니다.
 PK = "SERIAL PRIMARY KEY" if USE_PG else "INTEGER PRIMARY KEY AUTOINCREMENT"
 
+# 이미지 등 바이너리 데이터 타입 (PostgreSQL: BYTEA / SQLite: BLOB)
+BLOB = "BYTEA" if USE_PG else "BLOB"
+
 
 class _ConnWrapper:
     """
