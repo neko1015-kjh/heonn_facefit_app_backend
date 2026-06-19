@@ -6,6 +6,7 @@ import math
 import json
 import time
 import uuid
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -19,6 +20,7 @@ from mediapipe.tasks.python import vision
 from fastapi import FastAPI, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 
 # FastAPI 앱(서버)을 만듭니다.
 app = FastAPI(title="FaceFit API")
@@ -90,6 +92,7 @@ def _init_db():
             id {db.PK},
             token TEXT UNIQUE NOT NULL,    -- 로그인 토큰(기기에 저장)
             provider TEXT,                 -- 카카오/네이버/구글 등
+            provider_id TEXT DEFAULT '',   -- 소셜 계정 고유 id(같은 사람 식별용)
             display_name TEXT,             -- 표시 이름
             created_at TEXT NOT NULL
         )
@@ -131,6 +134,11 @@ def _init_db():
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS signature TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE detections ADD COLUMN IF NOT EXISTS duration_ms INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id TEXT DEFAULT ''")
+    else:
+        ucols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+        if "provider_id" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN provider_id TEXT DEFAULT ''")
     conn.commit()
     conn.close()
 
@@ -254,6 +262,80 @@ def auth_login(payload: dict):
     conn.commit()
     conn.close()
     return {"token": token, "user": {"id": uid, "provider": provider, "display_name": name}}
+
+
+# ─────────────────────────────────────────────────────────────
+# 카카오 로그인 (실제 OAuth)
+# 흐름: 프론트 → /auth/kakao/login → 카카오 인증 → /auth/kakao/callback → 웹으로 토큰 전달
+# ─────────────────────────────────────────────────────────────
+KAKAO_REST_KEY = os.environ.get("KAKAO_REST_KEY", "")
+KAKAO_REDIRECT_URI = "https://neko1015-facefit-backend.hf.space/auth/kakao/callback"
+WEB_URL = "https://neko1015-heonn-web.static.hf.space"
+
+
+@app.get("/auth/kakao/login")
+def kakao_login():
+    """카카오 인증 페이지로 보냅니다."""
+    params = urllib.parse.urlencode({
+        "client_id": KAKAO_REST_KEY,
+        "redirect_uri": KAKAO_REDIRECT_URI,
+        "response_type": "code",
+    })
+    return RedirectResponse(f"https://kauth.kakao.com/oauth/authorize?{params}")
+
+
+@app.get("/auth/kakao/callback")
+def kakao_callback(code: str = ""):
+    """카카오가 보내준 code로 사용자 정보를 받아 우리 계정을 만들고, 웹으로 토큰을 전달합니다."""
+    if not code:
+        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+    try:
+        # 1) code → 카카오 access_token
+        token_body = urllib.parse.urlencode({
+            "grant_type": "authorization_code",
+            "client_id": KAKAO_REST_KEY,
+            "redirect_uri": KAKAO_REDIRECT_URI,
+            "code": code,
+        }).encode()
+        req = urllib.request.Request("https://kauth.kakao.com/oauth/token", data=token_body)
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            access_token = json.loads(r.read())["access_token"]
+
+        # 2) access_token → 카카오 사용자 정보
+        me_req = urllib.request.Request("https://kapi.kakao.com/v2/user/me")
+        me_req.add_header("Authorization", f"Bearer {access_token}")
+        with urllib.request.urlopen(me_req, timeout=10) as r:
+            me = json.loads(r.read())
+        kakao_id = str(me.get("id", ""))
+        try:
+            nickname = me["kakao_account"]["profile"]["nickname"]
+        except Exception:
+            nickname = "카카오 사용자"
+        if not kakao_id:
+            return RedirectResponse(f"{WEB_URL}/?login_error=1")
+
+        # 3) 같은 카카오 계정이면 기존 사용자 재사용, 없으면 새로 생성
+        conn = db.connect()
+        row = conn.execute(
+            "SELECT token FROM users WHERE provider = 'kakao' AND provider_id = ?", (kakao_id,)
+        ).fetchone()
+        if row:
+            token = row[0]
+        else:
+            token = uuid.uuid4().hex
+            conn.execute(
+                "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
+                (token, "kakao", kakao_id, nickname, datetime.now().isoformat(timespec="seconds")),
+            )
+            conn.commit()
+        conn.close()
+
+        # 4) 웹으로 토큰 전달 (프론트가 URL의 token을 읽어 로그인 처리)
+        return RedirectResponse(f"{WEB_URL}/?token={token}")
+    except Exception as e:
+        print("카카오 로그인 실패:", e)
+        return RedirectResponse(f"{WEB_URL}/?login_error=1")
 
 
 # 저장된 토큰으로 로그인 상태를 확인합니다(자동 로그인).
