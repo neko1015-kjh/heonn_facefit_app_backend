@@ -817,6 +817,16 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     }
 
 
+# 서비스 대시보드 페이지 — 외부에서도 볼 수 있는 공개 대시보드 ("/dashboard")
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard_page():
+    path = os.path.join(BASE_DIR, "dashboard.html")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    return "<h1>대시보드 준비 중입니다.</h1>"
+
+
 # 분석 사진 갤러리 페이지 — 저장된 분석 사진을 모아 봅니다. ("/gallery")
 @app.get("/gallery", response_class=HTMLResponse)
 def gallery():

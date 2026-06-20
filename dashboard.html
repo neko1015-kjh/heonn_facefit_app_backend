@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HeOnn FaceFit — 서비스 대시보드</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #09090b; --surface: #18181b; --surface2: #27272a;
+    --border: #27272a; --border2: #3f3f46;
+    --text: #f4f4f5; --muted: #a1a1aa; --faint: #71717a;
+    --amber: #fbbf24; --emerald: #34d399; --red: #f87171; --blue: #60a5fa;
+  }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+    line-height: 1.5; padding: 24px 16px 64px; min-height: 100vh; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  header { text-align: center; padding: 20px 0 28px; }
+  .logo { font-size: 30px; font-weight: 800; color: var(--amber); letter-spacing: -0.5px; }
+  .sub { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .updated { color: var(--faint); font-size: 12px; margin-top: 8px; }
+
+  .section-title {
+    font-size: 13px; color: var(--faint); font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; margin: 30px 4px 12px; display: flex; align-items: center; gap: 8px;
+  }
+
+  .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 520px) { .status-grid { grid-template-columns: 1fr; } }
+  .status-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .status-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .status-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .b-ok { background: rgba(52,211,153,0.15); color: var(--emerald); }
+  .b-warn { background: rgba(251,191,36,0.15); color: var(--amber); }
+  .b-local { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .status-desc { color: var(--faint); font-size: 12px; margin-top: 8px; }
+  .status-link {
+    display: inline-block; margin-top: 10px; font-size: 12px; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--border2); border-radius: 8px; padding: 5px 10px;
+  }
+  .status-link:hover { color: var(--amber); border-color: var(--amber); }
+
+  .hero {
+    background: linear-gradient(135deg, rgba(245,158,11,0.14), rgba(245,158,11,0.04));
+    border: 1px solid rgba(245,158,11,0.4); border-radius: 18px; padding: 20px; margin-top: 14px;
+  }
+  .hero .label { font-size: 12px; color: var(--amber); font-weight: 600; letter-spacing: 1px; }
+  .hero .desc { color: var(--muted); font-size: 13px; margin: 8px 0 14px; }
+  .hero-url { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .hero-url a { font-size: 17px; font-weight: 700; color: var(--text); text-decoration: none; word-break: break-all; }
+  .hero-url a:hover { color: var(--amber); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 14px;
+  }
+  .icon {
+    width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0; background: var(--surface2);
+    display: flex; align-items: center; justify-content: center; font-size: 19px;
+  }
+  .card-body { flex: 1; min-width: 0; }
+  .card-title { font-size: 15px; font-weight: 600; }
+  .card-title .tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin-left: 8px; }
+  .tag-live { background: rgba(52,211,153,0.15); color: var(--emerald); }
+  .tag-local { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .tag-soon { background: rgba(161,161,170,0.15); color: var(--muted); }
+  .card-desc { color: var(--faint); font-size: 12px; margin-top: 2px; }
+  .card-url { display: block; color: var(--muted); font-size: 13px; margin-top: 6px; text-decoration: none; word-break: break-all; }
+  .card-url:hover { color: var(--amber); }
+  .copy-btn {
+    flex-shrink: 0; background: var(--surface2); border: 1px solid var(--border2); color: var(--muted);
+    border-radius: 9px; padding: 8px 12px; font-size: 12px; cursor: pointer; font-weight: 500; white-space: nowrap;
+    text-decoration: none; display: inline-block;
+  }
+  .copy-btn:hover { background: var(--amber); color: var(--bg); border-color: var(--amber); }
+  .copy-btn.done { background: var(--emerald); color: var(--bg); border-color: var(--emerald); }
+  .none { color: var(--faint); font-size: 13px; }
+
+  .progress-bar { height: 8px; background: var(--surface2); border-radius: 999px; overflow: hidden; margin: 4px 4px 16px; }
+  .progress-fill { height: 100%; width: 92%; background: linear-gradient(90deg, var(--amber), var(--emerald)); border-radius: 999px; }
+  .section-note { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--faint); }
+  .spacer { height: 12px; }
+  .rg-done { color: var(--emerald); }
+  .rg-todo { color: var(--faint); }
+  .progress-text { font-size: 12px; color: var(--muted); margin: 0 4px 14px; }
+  .road-group { margin-bottom: 18px; }
+  .road-group h3 { font-size: 13px; font-weight: 700; margin: 0 4px 8px; }
+  .road-item {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 6px; font-size: 14px; display: flex; align-items: flex-start; gap: 10px;
+  }
+  .road-item .ck { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+  .road-item.done { color: var(--muted); }
+  .road-item.done .t { text-decoration: line-through; text-decoration-color: var(--faint); }
+  .road-item .sub { display: block; color: var(--faint); font-size: 12px; margin-top: 2px; text-decoration: none; }
+
+  footer { text-align: center; color: var(--faint); font-size: 12px; margin-top: 36px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">HeOnn FaceFit</div>
+    <div class="sub">서비스 대시보드 · 상태 · 로드맵</div>
+    <div class="updated">마지막 점검: <span id="checked">2026-06-20 (백엔드·웹·갤러리 정상 · APK 빌드 완료)</span></div>
+  </header>
+
+  <div class="section-title">🖥️ 서버 상태 <span class="section-note">(마지막 점검 기준)</span></div>
+  <div class="status-grid">
+    <div class="status-card">
+      <div class="status-head"><div class="status-name">🤖 백엔드 (AI)</div><span class="badge b-ok">정상</span></div>
+      <div class="status-desc">Hugging Face · 얼굴 분석 AI + DB 연결 정상</div>
+      <a class="status-link" href="https://neko1015-facefit-backend.hf.space" target="_blank" rel="noopener">열어서 확인 ↗</a>
+    </div>
+    <div class="status-card">
+      <div class="status-head"><div class="status-name">💾 데이터베이스</div><span class="badge b-ok">정상</span></div>
+      <div class="status-desc">Neon PostgreSQL · 로그인·기록·사진·지표 영구 저장</div>
+      <a class="status-link" href="https://console.neon.tech" target="_blank" rel="noopener">콘솔 열기 ↗</a>
+    </div>
+    <div class="status-card">
+      <div class="status-head"><div class="status-name">🌐 웹사이트</div><span class="badge b-ok">정상</span></div>
+      <div class="status-desc">Hugging Face Static · 회사 PC·폰 어디서나 접속 OK</div>
+      <a class="status-link" href="https://neko1015-heonn-web.static.hf.space" target="_blank" rel="noopener">열어서 확인 ↗</a>
+    </div>
+    <div class="status-card">
+      <div class="status-head"><div class="status-name">📱 모바일 앱</div><span class="badge b-ok">빌드됨</span></div>
+      <div class="status-desc">안드로이드 APK 설치 가능 (com.heonn.facefit)</div>
+      <a class="status-link" href="https://expo.dev/accounts/neko1015/projects/facefit/builds/d14c5ed2-fb1a-47de-b9a6-45b867fdef20" target="_blank" rel="noopener">설치 페이지 ↗</a>
+    </div>
+  </div>
+
+  <div class="section-title">🔗 접속 주소</div>
+  <div class="hero">
+    <div class="label">📣 사람에게 공유할 주소</div>
+    <div class="desc">이 주소만 알려주면 누구나 PC·휴대폰 브라우저에서 사용할 수 있어요.</div>
+    <div class="hero-url">
+      <a href="https://neko1015-heonn-web.static.hf.space" target="_blank" rel="noopener">neko1015-heonn-web.static.hf.space</a>
+      <button type="button" class="copy-btn" data-copy="https://neko1015-heonn-web.static.hf.space">복사</button>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="card">
+    <div class="icon">🌐</div>
+    <div class="card-body">
+      <div class="card-title">웹사이트(공유) <span class="tag tag-live">운영</span></div>
+      <a class="card-url" href="https://neko1015-heonn-web.static.hf.space" target="_blank" rel="noopener">https://neko1015-heonn-web.static.hf.space</a>
+    </div>
+    <button type="button" class="copy-btn" data-copy="https://neko1015-heonn-web.static.hf.space">복사</button>
+  </div>
+
+  <div class="card">
+    <div class="icon">📱</div>
+    <div class="card-body">
+      <div class="card-title">모바일 앱(APK) <span class="tag tag-live">빌드됨</span></div>
+      <div class="card-desc">안드로이드 폰에서 링크 열어 설치 (com.heonn.facefit)</div>
+      <a class="card-url" href="https://expo.dev/accounts/neko1015/projects/facefit/builds/d14c5ed2-fb1a-47de-b9a6-45b867fdef20" target="_blank" rel="noopener">APK 설치 페이지 열기</a>
+    </div>
+    <a class="copy-btn" href="https://expo.dev/accounts/neko1015/projects/facefit/builds/d14c5ed2-fb1a-47de-b9a6-45b867fdef20" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+
+  <div class="card">
+    <div class="icon">🤖</div>
+    <div class="card-body">
+      <div class="card-title">백엔드 (AI 서버) <span class="tag tag-live">운영</span></div>
+      <a class="card-url" href="https://neko1015-facefit-backend.hf.space" target="_blank" rel="noopener">https://neko1015-facefit-backend.hf.space</a>
+    </div>
+    <button type="button" class="copy-btn" data-copy="https://neko1015-facefit-backend.hf.space">복사</button>
+  </div>
+
+  <div class="card">
+    <div class="icon">🖼️</div>
+    <div class="card-body">
+      <div class="card-title">분석 사진 갤러리</div>
+      <div class="card-desc">저장된 분석 사진을 모아 보기 (최신순)</div>
+      <a class="card-url" href="https://neko1015-facefit-backend.hf.space/gallery" target="_blank" rel="noopener">https://neko1015-facefit-backend.hf.space/gallery</a>
+    </div>
+    <a class="copy-btn" href="https://neko1015-facefit-backend.hf.space/gallery" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+
+  <div class="section-title">📋 개발 로드맵 (전체 할 일)</div>
+  <div class="progress-bar"><div class="progress-fill"></div></div>
+  <div class="progress-text">전체 진행률 약 <b>92%</b> · 완료 23 · 진행 0 · 예정 2</div>
+
+  <div class="road-group">
+    <h3 class="rg-done">✅ 완료</h3>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">Expo + React Native + TypeScript 프로젝트 셋업</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">기획서 기반 앱 화면 구현 (홈·스캔·케어·리포트·스토어)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">백엔드 FastAPI + MediaPipe 얼굴 랜드마크 478점 검출</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">얼굴 점수 분석 (비대칭·부기·피부톤)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">사용 이력 저장 + Before/After 변화 추적</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">부기·피부톤 맞춤 제품 추천</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">카메라·갤러리 촬영 분석 + 예외 처리</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">3D 안면 메시 뷰어</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">실시간 케어 (부위별 가이드·타이머·온도·진동 모드)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">보관·세척 가이드 + 알림 센터</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">로그인 실제화 (계정별 데이터 분리)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">AI 검증 지표 (검출률·재사용률·CSAT·처리시간)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">PostgreSQL 전환 (데이터 영구 보존)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">클라우드 배포 (백엔드 HF + 웹 HF Static)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">자동 로그인 + 인트로 화면 + 연결 기억 시 바로 홈</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">괄사 이미지 + 디바이스 동기화 로딩</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">얼굴 특징 + 성별 기반 동일인 판별</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">서비스 대시보드 페이지 (상태·로그·계정·갤러리)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">웹 호스팅 안정화 (Hugging Face Static 이전)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">GitHub 저장소 새 계정(neko1015-kjh)으로 이전</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">실제 카카오 로그인 (OAuth) <span class="sub">같은 카카오 계정 = 동일 사용자 연결</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">분석 사진 영구 저장 (DB)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">안드로이드 APK 빌드 <span class="sub">EAS 빌드 완료 · 콜드스타트 대응 · 폰 설치 가능</span></span></div>
+  </div>
+
+  <div class="road-group">
+    <h3 class="rg-todo">📋 예정</h3>
+    <div class="road-item"><span class="ck">📋</span><span class="t">실제 구글 로그인 (OAuth) <span class="sub">코드 완료 · Google Cloud 설정 대기 중</span></span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">실제 네이버 로그인 (OAuth)</span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">부위별 처방·Zone 정확도 평가셋 구축 (LG 지표용)</span></div>
+  </div>
+
+  <div class="section-title">👤 운영 계정 <span class="section-note">(카드의 "열기"로 관리 페이지 바로 이동)</span></div>
+  <div class="card">
+    <div class="icon">🤗</div>
+    <div class="card-body">
+      <div class="card-title">Hugging Face <span class="tag tag-live">neko1015</span></div>
+      <div class="card-desc">백엔드 + 웹 호스팅 (facefit-backend · heonn-web)</div>
+      <a class="card-url" href="https://huggingface.co/neko1015" target="_blank" rel="noopener">huggingface.co/neko1015</a>
+    </div>
+    <a class="copy-btn" href="https://huggingface.co/spaces" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+  <div class="card">
+    <div class="icon">🐙</div>
+    <div class="card-body">
+      <div class="card-title">GitHub <span class="tag tag-live">neko1015-kjh</span></div>
+      <div class="card-desc">소스 코드 저장 (백엔드 · 모바일)</div>
+      <a class="card-url" href="https://github.com/neko1015-kjh" target="_blank" rel="noopener">github.com/neko1015-kjh</a>
+    </div>
+    <a class="copy-btn" href="https://github.com/neko1015-kjh" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+  <div class="card">
+    <div class="icon">📦</div>
+    <div class="card-body">
+      <div class="card-title">Expo (EAS) <span class="tag tag-live">neko1015</span></div>
+      <div class="card-desc">안드로이드 APK 클라우드 빌드</div>
+      <a class="card-url" href="https://expo.dev/accounts/neko1015/projects/facefit/builds" target="_blank" rel="noopener">expo.dev · facefit 빌드 목록</a>
+    </div>
+    <a class="copy-btn" href="https://expo.dev/accounts/neko1015/projects/facefit/builds" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+  <div class="card">
+    <div class="icon">💬</div>
+    <div class="card-body">
+      <div class="card-title">카카오 개발자 <span class="tag tag-live">HeOnn FaceFit</span></div>
+      <div class="card-desc">카카오 로그인 (앱 ID 1490580)</div>
+      <a class="card-url" href="https://developers.kakao.com/console/app/1490580" target="_blank" rel="noopener">developers.kakao.com · 앱 1490580</a>
+    </div>
+    <a class="copy-btn" href="https://developers.kakao.com/console/app/1490580" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+  <div class="card">
+    <div class="icon">💾</div>
+    <div class="card-body">
+      <div class="card-title">Neon <span class="tag tag-live">DB</span></div>
+      <div class="card-desc">PostgreSQL (로그인·기록·사진·지표)</div>
+      <a class="card-url" href="https://console.neon.tech" target="_blank" rel="noopener">console.neon.tech</a>
+    </div>
+    <a class="copy-btn" href="https://console.neon.tech" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+
+  <div class="section-title">🛠️ 관리 · 소스</div>
+  <div class="card">
+    <div class="icon">🗂️</div>
+    <div class="card-body"><div class="card-title">백엔드 코드 (GitHub)</div><a class="card-url" href="https://github.com/neko1015-kjh/heonn_facefit_app_backend" target="_blank" rel="noopener">github.com/neko1015-kjh/heonn_facefit_app_backend</a></div>
+    <button type="button" class="copy-btn" data-copy="https://github.com/neko1015-kjh/heonn_facefit_app_backend">복사</button>
+  </div>
+  <div class="card">
+    <div class="icon">🗂️</div>
+    <div class="card-body"><div class="card-title">모바일 코드 (GitHub)</div><a class="card-url" href="https://github.com/neko1015-kjh/heonn_facefit_app_mobile" target="_blank" rel="noopener">github.com/neko1015-kjh/heonn_facefit_app_mobile</a></div>
+    <button type="button" class="copy-btn" data-copy="https://github.com/neko1015-kjh/heonn_facefit_app_mobile">복사</button>
+  </div>
+  <div class="card">
+    <div class="icon">🚀</div>
+    <div class="card-body"><div class="card-title">백엔드 배포 (Hugging Face)</div><a class="card-url" href="https://huggingface.co/spaces/neko1015/facefit-backend" target="_blank" rel="noopener">huggingface.co/spaces/neko1015/facefit-backend</a></div>
+    <button type="button" class="copy-btn" data-copy="https://huggingface.co/spaces/neko1015/facefit-backend">복사</button>
+  </div>
+  <div class="card">
+    <div class="icon">☁️</div>
+    <div class="card-body"><div class="card-title">웹 배포 (Hugging Face Static)</div><a class="card-url" href="https://huggingface.co/spaces/neko1015/heonn-web" target="_blank" rel="noopener">huggingface.co/spaces/neko1015/heonn-web</a></div>
+    <button type="button" class="copy-btn" data-copy="https://huggingface.co/spaces/neko1015/heonn-web">복사</button>
+  </div>
+
+  <footer>
+    HeOnn FaceFit — AI 얼굴 분석 · 온열 유기(방짜유기) 괄사 케어<br/>
+    상태는 마지막 점검 시점 기준이며, 각 카드의 "열어서 확인"으로 실시간 확인하세요.<br/>
+    백엔드는 잠시 안 쓰면 잠들어, 첫 접속이 30초~1분 느릴 수 있어요.
+  </footer>
+</div>
+
+<script>
+  document.querySelectorAll('.copy-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.getAttribute('data-copy');
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(function () {
+        var orig = btn.textContent;
+        btn.textContent = '복사됨!';
+        btn.classList.add('done');
+        setTimeout(function () { btn.textContent = orig; btn.classList.remove('done'); }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>
