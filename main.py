@@ -274,6 +274,11 @@ KAKAO_CLIENT_SECRET = os.environ.get("KAKAO_CLIENT_SECRET", "")  # 카카오 보
 KAKAO_REDIRECT_URI = "https://neko1015-facefit-backend.hf.space/auth/kakao/callback"
 WEB_URL = "https://neko1015-heonn-web.static.hf.space"
 
+# 구글 로그인 설정 (Google Cloud Console에서 발급)
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REDIRECT_URI = "https://neko1015-facefit-backend.hf.space/auth/google/callback"
+
 
 @app.get("/auth/kakao/login")
 def kakao_login():
@@ -349,6 +354,79 @@ def kakao_callback(code: str = ""):
         return RedirectResponse(f"{WEB_URL}/?login_error=1")
     except Exception as e:
         print("카카오 로그인 실패:", e)
+        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+
+
+# ─────────────────────────────────────────────────────────────
+# 구글 로그인 (실제 OAuth) — 카카오와 같은 흐름
+# ─────────────────────────────────────────────────────────────
+@app.get("/auth/google/login")
+def google_login():
+    """구글 인증 페이지로 보냅니다."""
+    params = urllib.parse.urlencode({
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+    })
+    return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
+
+
+@app.get("/auth/google/callback")
+def google_callback(code: str = ""):
+    """구글이 보내준 code로 사용자 정보를 받아 우리 계정을 만들고, 웹으로 토큰을 전달합니다."""
+    if not code:
+        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+    try:
+        # 1) code → 구글 access_token (구글은 client_secret 필수)
+        token_body = urllib.parse.urlencode({
+            "grant_type": "authorization_code",
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "code": code,
+        }).encode()
+        req = urllib.request.Request("https://oauth2.googleapis.com/token", data=token_body)
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            access_token = json.loads(r.read())["access_token"]
+
+        # 2) access_token → 구글 사용자 정보
+        ui_req = urllib.request.Request("https://www.googleapis.com/oauth2/v2/userinfo")
+        ui_req.add_header("Authorization", f"Bearer {access_token}")
+        with urllib.request.urlopen(ui_req, timeout=10) as r:
+            ui = json.loads(r.read())
+        google_id = str(ui.get("id", ""))
+        name = ui.get("name") or ui.get("email") or "구글 사용자"
+        if not google_id:
+            return RedirectResponse(f"{WEB_URL}/?login_error=1")
+
+        # 3) 같은 구글 계정이면 기존 사용자 재사용, 없으면 새로 생성
+        conn = db.connect()
+        row = conn.execute(
+            "SELECT token FROM users WHERE provider = 'google' AND provider_id = ?", (google_id,)
+        ).fetchone()
+        if row:
+            token = row[0]
+        else:
+            token = uuid.uuid4().hex
+            conn.execute(
+                "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
+                (token, "google", google_id, name, datetime.now().isoformat(timespec="seconds")),
+            )
+            conn.commit()
+        conn.close()
+
+        return RedirectResponse(f"{WEB_URL}/?token={token}")
+    except urllib.error.HTTPError as he:
+        try:
+            detail = he.read().decode("utf-8", "ignore")
+        except Exception:
+            detail = ""
+        print(f"구글 로그인 실패 {he.code}: {detail}")
+        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+    except Exception as e:
+        print("구글 로그인 실패:", e)
         return RedirectResponse(f"{WEB_URL}/?login_error=1")
 
 
