@@ -245,6 +245,20 @@
     <div class="road-item"><span class="ck">📋</span><span class="t">콜드스타트 제거(서버 항상 켜기)·처리 속도·동시 접속</span></div>
   </div>
 
+  <div class="section-title">🛡️ 예외 처리·안정성 보강 <span class="section-note">(점검 완료 · 2026-06-22)</span></div>
+  <div class="road-group">
+    <h3 class="rg-todo">백엔드 (우선순위순)</h3>
+    <div class="road-item"><span class="ck">🔴</span><span class="t">DB 연결 안전 처리 (최우선) <span class="sub">save_scan·history·gallery·recommendations·metrics·uploads를 try/finally로 — DB 끊김 시 500·연결 누수 방지(Neon 한도 초과 예방)</span></span></div>
+    <div class="road-item"><span class="ck">🟠</span><span class="t">분석(mediapipe/OpenCV) 예외 처리 <span class="sub">이상 이미지에도 500 대신 친절한 안내 반환</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">전역 예외 핸들러 추가 <span class="sub">예상 못한 오류 시 스택트레이스 대신 안내 JSON</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">추천 제품 이미지 외부 URL(unsplash) 대체 처리 <span class="sub">회사망 차단 시 대체 이미지 표시</span></span></div>
+  </div>
+  <div class="road-group">
+    <h3 class="rg-done">프론트 (앱) — 대체로 양호</h3>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">주요 서버 호출 예외 처리됨 <span class="sub">로그인·이력·추천·지표·분석·평가 모두 try/catch</span></span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">실패 시 "다시 시도" 안내 버튼 (선택) <span class="sub">추천·지표·리포트 화면 빈 화면 대신 재시도 유도</span></span></div>
+  </div>
+
   <div class="section-title">👤 운영 계정 <span class="section-note">(카드의 "열기"로 관리 페이지 바로 이동)</span></div>
   <div class="card">
     <div class="icon">🤗</div>
