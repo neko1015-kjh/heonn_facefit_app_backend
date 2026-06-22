@@ -166,6 +166,7 @@ _base_options = mp_python.BaseOptions(model_asset_path=MODEL_PATH)
 _landmarker_options = vision.FaceLandmarkerOptions(
     base_options=_base_options,
     num_faces=1,  # 얼굴 1명만 검출
+    output_facial_transformation_matrixes=True,  # 머리 자세(각도) 계산용 행렬 출력
 )
 # 검출기는 서버가 켜질 때 한 번만 만들어 재사용합니다(빠른 응답을 위해).
 face_landmarker = vision.FaceLandmarker.create_from_options(_landmarker_options)
@@ -215,6 +216,39 @@ def _estimate_gender(image, face, w, h):
         return GENDER_LIST[int(pred[0].argmax())]
     except Exception:
         return ""
+
+
+def _estimate_head_pose(result):
+    """
+    검출 결과에서 머리 자세를 도(°) 단위로 추정합니다.
+    - yaw: 좌우로 돌아간 정도 / pitch: 위아래로 돌아간 정도 / roll: 갸웃 기울인 정도
+    값이 0에 가까울수록 '정면'입니다. 행렬 정보가 없으면 None을 돌려줍니다.
+    (정면이 아닐수록 좌우 폭이 왜곡돼 비대칭·균형 점수가 부정확해지므로 사전 판단에 사용)
+    """
+    mats = getattr(result, "facial_transformation_matrixes", None)
+    if not mats:
+        return None
+    R = np.array(mats[0])[:3, :3].astype(float)
+    # 열 단위 스케일 제거 → 순수 회전 행렬로 정리
+    for c in range(3):
+        n = np.linalg.norm(R[:, c])
+        if n > 0:
+            R[:, c] /= n
+    try:
+        ang = cv2.RQDecomp3x3(R)[0]  # (pitch, yaw, roll) 근사값(도)
+    except Exception:
+        return None
+    return {
+        "pitch": round(float(ang[0]), 1),
+        "yaw": round(float(ang[1]), 1),
+        "roll": round(float(ang[2]), 1),
+    }
+
+
+# 정면으로 인정하는 머리 각도 한계(도). 이보다 많이 돌아가면 정확한 측정이 어려워 다시 촬영을 안내합니다.
+# (실제 셀카 검증 결과 정면은 yaw·pitch가 대체로 ±10° 이내였음 → 여유를 둬 설정)
+MAX_YAW = 22.0    # 좌우 회전 한계
+MAX_PITCH = 25.0  # 상하 회전 한계(폰을 내려다보는 경향 고려해 약간 넉넉히)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -673,6 +707,15 @@ def _detect_and_score(raw):
     if problem:
         return {"detected": False, "message": problem}
 
+    # 머리 각도(포즈) 검사: 고개가 옆/위아래로 많이 돌아가면 좌우 폭이 왜곡돼 점수가 부정확해집니다.
+    # 정면이 아닐 경우 다시 촬영하도록 안내해, 매번 같은 조건에서 측정되게 합니다(일관성↑).
+    pose = _estimate_head_pose(result)
+    if pose is not None and (abs(pose["yaw"]) > MAX_YAW or abs(pose["pitch"]) > MAX_PITCH):
+        return {
+            "detected": False,
+            "message": "고개가 옆이나 위아래로 돌아갔어요. 카메라를 정면으로 바라보고 다시 촬영해 주세요.",
+        }
+
     scores = _compute_scores(face, width, height)
     if scores is None:
         return {"detected": False, "message": "얼굴이 정확히 인식되지 않았어요. 정면 얼굴이 잘 보이는 사진으로 다시 시도해 주세요."}
@@ -690,6 +733,7 @@ def _detect_and_score(raw):
         "skin": skin,
         "signature": signature,
         "gender": gender,
+        "pose": pose,  # 머리 각도(정면 정도) — 측정 보정·검증용
         "landmark_count": len(face),
         "landmarks": landmarks,
     }
