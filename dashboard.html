@@ -185,7 +185,7 @@
 
   <div class="section-title">📋 개발 로드맵 (전체 할 일)</div>
   <div class="progress-bar"><div class="progress-fill"></div></div>
-  <div class="progress-text">전체 진행률 약 <b>92%</b> · 완료 23 · 진행 0 · 예정 2</div>
+  <div class="progress-text">앱 핵심 기능 약 <b>95%</b> 완료 · 현재 <b>AI 엔진 보강 단계</b> 착수(1순위 1단계 완료, 2단계 진행 예정)</div>
 
   <div class="road-group">
     <h3 class="rg-done">✅ 완료</h3>
@@ -212,13 +212,37 @@
     <div class="road-item done"><span class="ck">✅</span><span class="t">실제 카카오 로그인 (OAuth) <span class="sub">같은 카카오 계정 = 동일 사용자 연결</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">분석 사진 영구 저장 (DB)</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">안드로이드 APK 빌드 <span class="sub">EAS 빌드 완료 · 콜드스타트 대응 · 폰 설치 가능</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">사진 업로드 방식 최신화 <span class="sub">최신 RN 호환(Expo uploadAsync) — APK 분석 실패 해결</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">분석 결과 화면 얼굴 영역만 표시 (개인정보 보호)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">앱 아이콘 헤은 로고 적용</span></div>
   </div>
 
   <div class="road-group">
     <h3 class="rg-todo">📋 예정</h3>
     <div class="road-item"><span class="ck">📋</span><span class="t">실제 구글 로그인 (OAuth) <span class="sub">코드 완료 · Google Cloud 설정 대기 중</span></span></div>
     <div class="road-item"><span class="ck">📋</span><span class="t">실제 네이버 로그인 (OAuth)</span></div>
-    <div class="road-item"><span class="ck">📋</span><span class="t">부위별 처방·Zone 정확도 평가셋 구축 (LG 지표용)</span></div>
+  </div>
+
+  <div class="section-title">🧠 AI 엔진 보강 계획 <span class="section-note">(백엔드 · 측정 정확도·신뢰도 향상)</span></div>
+  <div class="road-group">
+    <h3 class="rg-done">🥇 1순위 · 측정 정확도·일관성</h3>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">1단계: 머리 각도(포즈) 측정 + 정면 게이팅 <span class="sub">고개 돌아간 사진 거르기 — 배포 완료</span></span></div>
+    <div class="road-item"><span class="ck">🔄</span><span class="t">2단계: 점수 각도 보정 <span class="sub">각도로 인한 왜곡 제거 후 진짜 비대칭·부기 계산 (진행 예정)</span></span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">3단계: 조명 보정 피부톤 <span class="sub">색공간 보정으로 조명 영향 줄여 일관된 붉은기·밝기</span></span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">점수식 근거화 <span class="sub">각도(°)·비율(%) 등 실제 의미·정상범위 기반 재설계</span></span></div>
+  </div>
+  <div class="road-group">
+    <h3 class="rg-todo">🥈 2순위 · 검증 체계 (LG 지표 실측)</h3>
+    <div class="road-item"><span class="ck">📋</span><span class="t">재현성 측정 <span class="sub">같은 사람 반복 촬영 시 점수 안정성 수치화</span></span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">검출률·정확도 평가셋 구축 <span class="sub">라벨 데이터로 정확도 실측</span></span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">부위별 처방·Zone 정확도 평가셋</span></div>
+  </div>
+  <div class="road-group">
+    <h3 class="rg-todo">🥉 3순위 · 측정 항목 확장 &nbsp;|&nbsp; 4순위 · 성능·안정성</h3>
+    <div class="road-item"><span class="ck">📋</span><span class="t">표정·눈 비대칭 측정 (블렌드셰이프 52종)</span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">주름·다크서클·나이 추정 (일부 모델 추가 필요)</span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">동일인 판별 정확도 향상 (정식 얼굴 임베딩)</span></div>
+    <div class="road-item"><span class="ck">📋</span><span class="t">콜드스타트 제거(서버 항상 켜기)·처리 속도·동시 접속</span></div>
   </div>
 
   <div class="section-title">👤 운영 계정 <span class="section-note">(카드의 "열기"로 관리 페이지 바로 이동)</span></div>
