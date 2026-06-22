@@ -885,38 +885,144 @@ def gallery():
     ).fetchall()
     conn.close()
 
+    def esc(s):
+        # HTML 속성/본문에 안전하게 넣기 위한 최소 이스케이프
+        return str(s).replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+
     cards = []
     for r in rows:
         rid, created_at, fname, symmetry, balance, gender, name = r
-        who = name or "게스트"
+        who = esc(name or "게스트")
         cards.append(
-            f'<figure class="card">'
+            f'<figure class="card" data-id="{rid}" data-label="{who}">'
             f'<img loading="lazy" src="/uploads/{fname}" alt="분석 사진"/>'
             f'<figcaption><b>{who}</b> · {created_at}<br/>'
-            f'비대칭 {symmetry} · 부기 {balance}{(" · " + gender) if gender else ""}</figcaption>'
+            f'비대칭 {symmetry} · 부기 {balance}{(" · " + esc(gender)) if gender else ""}'
+            f'<span class="hint">👆 클릭 → 3D 복원 보기</span></figcaption>'
             f'</figure>'
         )
     body = "".join(cards) if cards else '<p class="empty">아직 저장된 분석 사진이 없습니다.</p>'
 
-    html = f"""<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+    # CSS/JS에는 중괄호가 많아 f-string을 쓰지 않고, 동적 값(개수·카드)만 끼워 넣습니다.
+    head = """<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>HeOnn FaceFit — 분석 사진 갤러리</title>
 <style>
-  body {{ margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px; }}
-  h1 {{ color:#fbbf24; font-size:22px; text-align:center; }}
-  .sub {{ color:#a1a1aa; font-size:13px; text-align:center; margin-bottom:24px; }}
-  .grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; max-width:1100px; margin:0 auto; }}
-  .card {{ background:#18181b; border:1px solid #27272a; border-radius:14px; overflow:hidden; margin:0; }}
-  .card img {{ width:100%; height:200px; object-fit:cover; display:block; background:#27272a; }}
-  figcaption {{ padding:10px 12px; font-size:12px; color:#a1a1aa; line-height:1.5; }}
-  figcaption b {{ color:#f4f4f5; }}
-  .empty {{ text-align:center; color:#71717a; margin-top:60px; }}
+  body { margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px; }
+  h1 { color:#fbbf24; font-size:22px; text-align:center; }
+  .sub { color:#a1a1aa; font-size:13px; text-align:center; margin-bottom:24px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; max-width:1100px; margin:0 auto; }
+  .card { background:#18181b; border:1px solid #27272a; border-radius:14px; overflow:hidden; margin:0; cursor:pointer; transition:border-color .15s, transform .15s; }
+  .card:hover { border-color:#fbbf24; transform:translateY(-2px); }
+  .card img { width:100%; height:200px; object-fit:cover; display:block; background:#27272a; }
+  figcaption { padding:10px 12px; font-size:12px; color:#a1a1aa; line-height:1.5; }
+  figcaption b { color:#f4f4f5; }
+  .hint { display:block; color:#fbbf24; font-size:11px; margin-top:6px; }
+  .empty { text-align:center; color:#71717a; margin-top:60px; }
+  .ov { position:fixed; inset:0; background:rgba(0,0,0,.72); display:none; align-items:center; justify-content:center; z-index:50; }
+  .ov.show { display:flex; }
+  .modal { background:#18181b; border:1px solid #3f3f46; border-radius:16px; padding:16px; width:min(92vw,400px); }
+  .mhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .mhead .mt { color:#f4f4f5; font-weight:700; font-size:15px; }
+  .mhead button { background:none; border:none; color:#a1a1aa; font-size:20px; cursor:pointer; line-height:1; }
+  #pc { width:100%; height:auto; background:#09090b; border-radius:12px; display:block; }
+  .mmsg { color:#a1a1aa; font-size:12px; text-align:center; margin-top:10px; }
 </style></head><body>
-<h1>HeOnn FaceFit — 분석 사진 갤러리</h1>
-<div class="sub">최근 분석 사진 {len(rows)}장 (최신순)</div>
-<div class="grid">{body}</div>
+<h1>HeOnn FaceFit — 분석 사진 갤러리</h1>"""
+
+    modal = """
+<div id="ov" class="ov" onclick="closePc()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="mhead"><span class="mt" id="mtitle">3D 복원</span><button onclick="closePc()">✕</button></div>
+    <canvas id="pc" width="360" height="360"></canvas>
+    <div class="mmsg" id="mmsg">불러오는 중…</div>
+  </div>
+</div>
+<script>
+  var raf = null;
+  function closePc(){ document.getElementById('ov').classList.remove('show'); if(raf){ cancelAnimationFrame(raf); raf=null; } }
+  async function open3D(id, label){
+    var ov = document.getElementById('ov'); ov.classList.add('show');
+    document.getElementById('mtitle').textContent = '3D 복원 · ' + label;
+    var msg = document.getElementById('mmsg'); msg.textContent = '3D 복원 중… (얼굴 점 추출)';
+    if(raf){ cancelAnimationFrame(raf); raf=null; }
+    var ctx = document.getElementById('pc').getContext('2d'); ctx.clearRect(0,0,360,360);
+    try {
+      var res = await fetch('/scan/' + id + '/landmarks');
+      var d = await res.json();
+      if(!d.detected){ msg.textContent = d.message || '얼굴을 찾지 못했어요.'; return; }
+      msg.textContent = '특징점 ' + d.landmark_count + '개 · 자동 회전 중';
+      render3D(d.landmarks);
+    } catch(e){ msg.textContent = '불러오지 못했어요. 잠시 후 다시 시도해 주세요.'; }
+  }
+  function render3D(lm){
+    var c = document.getElementById('pc'), ctx = c.getContext('2d');
+    var W = c.width, H = c.height, n = lm.length;
+    var cx=0, cy=0, cz=0;
+    for(var i=0;i<n;i++){ cx+=lm[i].x; cy+=lm[i].y; cz+=lm[i].z; }
+    cx/=n; cy/=n; cz/=n;
+    var pts = lm.map(function(p){ return { x:p.x-cx, y:p.y-cy, z:p.z-cz }; });
+    var ang = 0;
+    function frame(){
+      ctx.clearRect(0,0,W,H);
+      ang += 0.012;
+      var co = Math.cos(ang), si = Math.sin(ang), scale = Math.min(W,H)*0.85;
+      for(var i=0;i<pts.length;i++){
+        var p = pts[i];
+        var rx = p.x*co - p.z*si;
+        var rz = p.x*si + p.z*co;
+        var sx = W/2 + rx*scale;
+        var sy = H/2 + p.y*scale;
+        var t = Math.max(0, Math.min(1, (rz+0.08)/0.16));
+        var size = 1 + t*2;
+        ctx.fillStyle = 'rgba(251,191,36,' + (0.35 + 0.65*t).toFixed(2) + ')';
+        ctx.fillRect(sx-size/2, sy-size/2, size, size);
+      }
+      raf = requestAnimationFrame(frame);
+    }
+    frame();
+  }
+  document.querySelectorAll('.card').forEach(function(el){
+    el.addEventListener('click', function(){ open3D(el.dataset.id, el.dataset.label || '분석'); });
+  });
+</script>
 </body></html>"""
+
+    html = (
+        head
+        + f'<div class="sub">최근 분석 사진 {len(rows)}장 (최신순) · 사진을 누르면 3D 복원이 보여요</div>'
+        + f'<div class="grid">{body}</div>'
+        + modal
+    )
     return html
+
+
+# 저장된 분석 사진에서 3D 얼굴 점(특징점 478개)을 다시 계산해 돌려줍니다.
+# 갤러리에서 사진을 누르면 이 주소로 점을 받아 3D 복원 팝업을 그립니다. ("/scan/{id}/landmarks")
+@app.get("/scan/{scan_id}/landmarks")
+def scan_landmarks(scan_id: int):
+    conn = db.connect()
+    try:
+        row = conn.execute("SELECT image_data FROM scans WHERE id = ?", (scan_id,)).fetchone()
+    finally:
+        conn.close()
+    if not row or row[0] is None:
+        return {"detected": False, "message": "사진을 찾을 수 없습니다."}
+    try:
+        raw = bytes(row[0])
+        image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            return {"detected": False, "message": "이미지를 읽을 수 없습니다."}
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        result = face_landmarker.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+        if not result.face_landmarks:
+            return {"detected": False, "message": "이 사진에서 얼굴을 찾지 못했어요."}
+        face = result.face_landmarks[0]
+        landmarks = [{"x": round(p.x, 4), "y": round(p.y, 4), "z": round(p.z, 4)} for p in face]
+        return {"detected": True, "landmark_count": len(landmarks), "landmarks": landmarks}
+    except Exception as e:
+        print("3D 복원 실패:", e)
+        return {"detected": False, "message": "3D 복원 중 오류가 발생했어요."}
 
 
 # 저장된 사진을 DB에서 읽어 돌려줍니다. ("/uploads/{파일명}")
