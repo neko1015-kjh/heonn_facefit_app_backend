@@ -399,23 +399,35 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = "https://neko1015-facefit-backend.hf.space/auth/google/callback"
 
+# 휴대폰 앱(네이티브)으로 돌아갈 때 쓰는 앱 주소(딥링크). app.json의 scheme과 같아야 합니다.
+APP_NATIVE_REDIRECT = "facefit://auth"
+
+
+def _oauth_redirect(state, token=None):
+    """로그인 후 돌아갈 주소를 만듭니다. state='native'면 앱으로, 아니면 웹으로 보냅니다."""
+    base = APP_NATIVE_REDIRECT if state == "native" else f"{WEB_URL}/"
+    if token:
+        return f"{base}?token={token}"
+    return f"{base}?login_error=1"
+
 
 @app.get("/auth/kakao/login")
-def kakao_login():
-    """카카오 인증 페이지로 보냅니다."""
+def kakao_login(state: str = "web"):
+    """카카오 인증 페이지로 보냅니다. state로 웹/앱(native) 복귀 대상을 구분합니다."""
     params = urllib.parse.urlencode({
         "client_id": KAKAO_REST_KEY,
         "redirect_uri": KAKAO_REDIRECT_URI,
         "response_type": "code",
+        "state": state,  # 콜백까지 그대로 전달됨(웹/네이티브 구분용)
     })
     return RedirectResponse(f"https://kauth.kakao.com/oauth/authorize?{params}")
 
 
 @app.get("/auth/kakao/callback")
-def kakao_callback(code: str = ""):
-    """카카오가 보내준 code로 사용자 정보를 받아 우리 계정을 만들고, 웹으로 토큰을 전달합니다."""
+def kakao_callback(code: str = "", state: str = "web"):
+    """카카오가 보내준 code로 사용자 정보를 받아 우리 계정을 만들고, 웹/앱으로 토큰을 전달합니다."""
     if not code:
-        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+        return RedirectResponse(_oauth_redirect(state))
     try:
         # 1) code → 카카오 access_token
         token_params = {
@@ -444,7 +456,7 @@ def kakao_callback(code: str = ""):
         except Exception:
             nickname = "카카오 사용자"
         if not kakao_id:
-            return RedirectResponse(f"{WEB_URL}/?login_error=1")
+            return RedirectResponse(_oauth_redirect(state))
 
         # 3) 같은 카카오 계정이면 기존 사용자 재사용, 없으면 새로 생성
         conn = db.connect()
@@ -462,8 +474,8 @@ def kakao_callback(code: str = ""):
             conn.commit()
         conn.close()
 
-        # 4) 웹으로 토큰 전달 (프론트가 URL의 token을 읽어 로그인 처리)
-        return RedirectResponse(f"{WEB_URL}/?token={token}")
+        # 4) 웹/앱으로 토큰 전달 (프론트가 URL의 token을 읽어 로그인 처리)
+        return RedirectResponse(_oauth_redirect(state, token))
     except urllib.error.HTTPError as he:
         # 카카오가 돌려준 상세 에러 내용을 로그에 남깁니다(원인 진단용).
         try:
@@ -471,10 +483,10 @@ def kakao_callback(code: str = ""):
         except Exception:
             detail = ""
         print(f"카카오 로그인 실패 {he.code}: {detail}")
-        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+        return RedirectResponse(_oauth_redirect(state))
     except Exception as e:
         print("카카오 로그인 실패:", e)
-        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+        return RedirectResponse(_oauth_redirect(state))
 
 
 # ─────────────────────────────────────────────────────────────
