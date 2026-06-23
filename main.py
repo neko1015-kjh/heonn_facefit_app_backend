@@ -103,7 +103,9 @@ def _init_db():
             provider TEXT,                 -- 카카오/네이버/구글 등
             provider_id TEXT DEFAULT '',   -- 소셜 계정 고유 id(같은 사람 식별용)
             display_name TEXT,             -- 표시 이름
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            consent_at TEXT DEFAULT '',    -- 약관·개인정보(얼굴 포함) 동의 시각(없으면 미동의)
+            marketing INTEGER DEFAULT 0    -- 마케팅 수신 동의(선택, 1=동의)
         )
         """
     )
@@ -147,11 +149,17 @@ def _init_db():
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE detections ADD COLUMN IF NOT EXISTS duration_ms INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing INTEGER DEFAULT 0")
         conn.execute(f"ALTER TABLE scans ADD COLUMN IF NOT EXISTS image_data {db.BLOB}")
     else:
         ucols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
         if "provider_id" not in ucols:
             conn.execute("ALTER TABLE users ADD COLUMN provider_id TEXT DEFAULT ''")
+        if "consent_at" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN consent_at TEXT DEFAULT ''")
+        if "marketing" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN marketing INTEGER DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -353,7 +361,28 @@ def auth_login(payload: dict):
     uid = cur.fetchone()[0]
     conn.commit()
     conn.close()
-    return {"token": token, "user": {"id": uid, "provider": provider, "display_name": name}}
+    # 새 계정은 아직 동의 전(consented=False)
+    return {"token": token, "user": {"id": uid, "provider": provider, "display_name": name, "consented": False}}
+
+
+# 약관·개인정보(얼굴 포함) 동의를 기록합니다. (로그인 후 동의 화면에서 호출)
+@app.post("/auth/consent")
+def auth_consent(payload: dict, authorization: str = Header(None)):
+    user_id = _current_user_id(authorization)
+    if not user_id:
+        return {"ok": False, "message": "로그인이 필요합니다."}
+    marketing = 1 if (payload or {}).get("marketing") else 0
+    consent_at = datetime.now().isoformat(timespec="seconds")
+    conn = db.connect()
+    try:
+        conn.execute(
+            "UPDATE users SET consent_at = ?, marketing = ? WHERE id = ?",
+            (consent_at, marketing, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True, "consent_at": consent_at, "marketing": bool(marketing)}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -529,12 +558,16 @@ def auth_me(authorization: str = Header(None)):
     token = authorization.replace("Bearer ", "").strip()
     conn = db.connect()
     row = conn.execute(
-        "SELECT id, provider, display_name FROM users WHERE token = ?", (token,)
+        "SELECT id, provider, display_name, consent_at FROM users WHERE token = ?", (token,)
     ).fetchone()
     conn.close()
     if not row:
         return {"authenticated": False}
-    return {"authenticated": True, "user": {"id": row[0], "provider": row[1], "display_name": row[2]}}
+    consented = bool(row[3])  # 동의 시각이 있으면 동의 완료
+    return {
+        "authenticated": True,
+        "user": {"id": row[0], "provider": row[1], "display_name": row[2], "consented": consented},
+    }
 
 
 # [실제 AI 기능 1단계] 얼굴 랜드마크 검출 주소입니다. ("/scan/landmarks")
