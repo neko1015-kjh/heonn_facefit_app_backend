@@ -1057,6 +1057,139 @@ def dashboard_page():
     return "<h1>대시보드 준비 중입니다.</h1>"
 
 
+# 계정 로그인 정보 히스토리 페이지 — 가입(첫 로그인)한 계정들을 모아 봅니다. ("/logins")
+# 참고: 매번 로그인할 때마다 기록을 따로 남기지는 않습니다(같은 계정은 같은 행을 재사용).
+#       그래서 "가입(첫 로그인) 시각"과 동의·분석 횟수를 기준으로 보여줍니다.
+@app.get("/logins", response_class=HTMLResponse)
+def logins_page():
+    conn = db.connect()
+    try:
+        rows = conn.execute(
+            """
+            SELECT u.id, u.provider, u.provider_id, u.display_name, u.created_at,
+                   u.consent_at, u.marketing,
+                   (SELECT COUNT(*) FROM scans s WHERE s.user_id = u.id) AS scan_count
+            FROM users u
+            ORDER BY u.id DESC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    def esc(s):
+        return str(s).replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+
+    # 로그인 방식별 표시(아이콘·이름·색)
+    prov_meta = {
+        "kakao": ("💬", "카카오", "#fbbf24"),
+        "google": ("🔵", "구글", "#60a5fa"),
+        "naver": ("🟢", "네이버", "#34d399"),
+        "guest": ("👤", "게스트", "#a1a1aa"),
+    }
+
+    def mask_id(pid):
+        # 소셜 계정 고유번호는 일부만 보여 줍니다(개인정보 최소 노출).
+        pid = str(pid or "")
+        if len(pid) <= 4:
+            return pid or "—"
+        return pid[:3] + "…" + pid[-2:]
+
+    # 통계
+    total = len(rows)
+    consented = sum(1 for r in rows if r[5])
+    by_prov = {}
+    for r in rows:
+        key = (r[1] or "guest").lower()
+        by_prov[key] = by_prov.get(key, 0) + 1
+
+    trs = []
+    for r in rows:
+        uid, provider, pid, name, created_at, consent_at, marketing, scan_count = r
+        pkey = (provider or "guest").lower()
+        emoji, pname, pcolor = prov_meta.get(pkey, ("👤", esc(provider or "기타"), "#a1a1aa"))
+        consent_badge = (
+            f'<span class="badge ok">동의 {esc(consent_at)}</span>' if consent_at
+            else '<span class="badge no">미동의</span>'
+        )
+        mkt_badge = '<span class="badge mkt">마케팅 ✓</span>' if marketing else ''
+        trs.append(
+            f'<tr>'
+            f'<td class="num">#{uid}</td>'
+            f'<td><span class="prov" style="color:{pcolor}">{emoji} {esc(pname)}</span></td>'
+            f'<td><b>{esc(name or "이름없음")}</b></td>'
+            f'<td class="mono">{esc(mask_id(pid))}</td>'
+            f'<td class="when">{esc(created_at)}</td>'
+            f'<td>{consent_badge} {mkt_badge}</td>'
+            f'<td class="num">{scan_count}</td>'
+            f'</tr>'
+        )
+    table_body = "".join(trs) if trs else '<tr><td colspan="7" class="empty">아직 로그인한 계정이 없습니다.</td></tr>'
+
+    prov_chips = "".join(
+        f'<span class="chip">{prov_meta.get(k, ("👤", k, ""))[0]} {prov_meta.get(k, ("", k, ""))[1]} <b>{v}</b></span>'
+        for k, v in sorted(by_prov.items(), key=lambda x: -x[1])
+    )
+
+    html = """<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>HeOnn FaceFit — 로그인 계정 히스토리</title>
+<style>
+  body { margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px; }
+  h1 { color:#fbbf24; font-size:22px; text-align:center; margin-bottom:4px; }
+  .sub { color:#a1a1aa; font-size:13px; text-align:center; margin-bottom:18px; }
+  .stats { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:1000px; margin:0 auto 18px; }
+  .stat { background:#18181b; border:1px solid #27272a; border-radius:12px; padding:12px 18px; text-align:center; }
+  .stat .v { color:#fbbf24; font-size:24px; font-weight:800; }
+  .stat .l { color:#a1a1aa; font-size:12px; margin-top:2px; }
+  .chips { text-align:center; margin-bottom:18px; }
+  .chip { display:inline-block; background:#18181b; border:1px solid #27272a; border-radius:999px; padding:6px 14px; margin:3px; font-size:13px; color:#d4d4d8; }
+  .chip b { color:#fbbf24; margin-left:4px; }
+  .wrap { max-width:1000px; margin:0 auto; overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; background:#18181b; border-radius:14px; overflow:hidden; font-size:13px; }
+  th, td { padding:11px 12px; text-align:left; border-bottom:1px solid #27272a; white-space:nowrap; }
+  th { background:#1f1f23; color:#fbbf24; font-size:12px; }
+  td.num { text-align:right; color:#a1a1aa; }
+  td.mono { font-family:ui-monospace,monospace; color:#a1a1aa; }
+  td.when { color:#d4d4d8; }
+  tr:hover td { background:#1c1c20; }
+  .prov { font-weight:700; }
+  .badge { display:inline-block; border-radius:6px; padding:2px 8px; font-size:11px; }
+  .badge.ok { background:rgba(52,211,153,.15); color:#34d399; }
+  .badge.no { background:rgba(248,113,113,.15); color:#f87171; }
+  .badge.mkt { background:rgba(96,165,250,.15); color:#60a5fa; }
+  .empty { text-align:center; color:#71717a; padding:40px; }
+  .note { max-width:1000px; margin:16px auto 0; color:#71717a; font-size:12px; line-height:1.6; }
+  .back { display:inline-block; margin-bottom:16px; color:#fbbf24; text-decoration:none; font-size:13px; }
+</style></head><body>
+<a class="back" href="/dashboard">← 대시보드로</a>
+<h1>로그인 계정 히스토리</h1>
+<div class="sub">앱·웹에서 로그인한 계정 기록 (최신순)</div>
+<div class="stats">
+  <div class="stat"><div class="v">__TOTAL__</div><div class="l">전체 계정</div></div>
+  <div class="stat"><div class="v">__CONSENT__</div><div class="l">약관·개인정보 동의</div></div>
+</div>
+<div class="chips">__CHIPS__</div>
+<div class="wrap">
+<table>
+<thead><tr>
+  <th>번호</th><th>로그인 방식</th><th>이름</th><th>계정 고유번호</th><th>가입(첫 로그인)</th><th>동의 상태</th><th>분석 수</th>
+</tr></thead>
+<tbody>__ROWS__</tbody>
+</table>
+</div>
+<p class="note">※ 같은 계정으로 다시 로그인해도 행이 새로 늘지 않습니다(같은 계정은 한 줄로 유지). 그래서 "가입(첫 로그인)" 시각을 기준으로 보여 드립니다.<br/>
+※ 계정 고유번호는 개인정보 보호를 위해 일부만 표시합니다.</p>
+</body></html>"""
+
+    html = (
+        html.replace("__TOTAL__", str(total))
+        .replace("__CONSENT__", str(consented))
+        .replace("__CHIPS__", prov_chips or '<span class="chip">아직 없음</span>')
+        .replace("__ROWS__", table_body)
+    )
+    return html
+
+
 # 분석 사진 갤러리 페이지 — 저장된 분석 사진을 모아 봅니다. ("/gallery")
 @app.get("/gallery", response_class=HTMLResponse)
 def gallery():
@@ -1085,13 +1218,17 @@ def gallery():
             extra += " · " + esc(gender)
         if age:
             extra += " · " + esc(age)
+        img_src = f"/uploads/{fname}"
         cards.append(
-            f'<figure class="card" data-id="{rid}" data-label="{who}">'
-            f'<img loading="lazy" src="/uploads/{fname}" alt="분석 사진"/>'
+            f'<figure class="card" data-id="{rid}" data-label="{who}" data-img="{img_src}">'
+            f'<img loading="lazy" src="{img_src}" alt="분석 사진"/>'
             f'<figcaption><b>{who}</b> · {created_at}<br/>'
             f'비대칭 {symmetry} · 부기 {balance}{extra}<br/>'
             f'다크서클 {dark_circle} · 주름 {wrinkle}'
-            f'<span class="hint">👆 클릭 → 3D 복원 보기</span></figcaption>'
+            f'<div class="btns">'
+            f'<button class="btn3d" data-id="{rid}" data-label="{who}">🧊 3D 복원 보기</button>'
+            f'<button class="btnrg" data-id="{rid}" data-label="{who}" data-img="{img_src}">📍 분석 부위 보기</button>'
+            f'</div></figcaption>'
             f'</figure>'
         )
     body = "".join(cards) if cards else '<p class="empty">아직 저장된 분석 사진이 없습니다.</p>'
@@ -1105,13 +1242,20 @@ def gallery():
   h1 { color:#fbbf24; font-size:22px; text-align:center; }
   .sub { color:#a1a1aa; font-size:13px; text-align:center; margin-bottom:24px; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; max-width:1100px; margin:0 auto; }
-  .card { background:#18181b; border:1px solid #27272a; border-radius:14px; overflow:hidden; margin:0; cursor:pointer; transition:border-color .15s, transform .15s; }
+  .card { background:#18181b; border:1px solid #27272a; border-radius:14px; overflow:hidden; margin:0; transition:border-color .15s, transform .15s; }
   .card:hover { border-color:#fbbf24; transform:translateY(-2px); }
   .card img { width:100%; height:200px; object-fit:cover; display:block; background:#27272a; }
   figcaption { padding:10px 12px; font-size:12px; color:#a1a1aa; line-height:1.5; }
   figcaption b { color:#f4f4f5; }
-  .hint { display:block; color:#fbbf24; font-size:11px; margin-top:6px; }
+  .btns { display:flex; gap:6px; margin-top:8px; }
+  .btns button { flex:1; background:#27272a; border:1px solid #3f3f46; color:#f4f4f5; border-radius:8px; padding:7px 4px; font-size:11px; cursor:pointer; transition:background .12s, border-color .12s; }
+  .btns button:hover { border-color:#fbbf24; background:#2e2e33; }
   .empty { text-align:center; color:#71717a; margin-top:60px; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .tabs button { background:#27272a; border:1px solid #3f3f46; color:#d4d4d8; border-radius:999px; padding:5px 12px; font-size:12px; cursor:pointer; }
+  .tabs button.on { background:#fbbf24; color:#09090b; border-color:#fbbf24; font-weight:700; }
+  #rg { width:100%; height:auto; background:#09090b; border-radius:12px; display:block; }
+  .rgdesc { color:#a1a1aa; font-size:12px; line-height:1.6; margin-top:10px; }
   .ov { position:fixed; inset:0; background:rgba(0,0,0,.72); display:none; align-items:center; justify-content:center; z-index:50; }
   .ov.show { display:flex; }
   .modal { background:#18181b; border:1px solid #3f3f46; border-radius:16px; padding:16px; width:min(92vw,400px); }
@@ -1124,19 +1268,59 @@ def gallery():
 <h1>HeOnn FaceFit — 분석 사진 갤러리</h1>"""
 
     modal = """
-<div id="ov" class="ov" onclick="closePc()">
+<div id="ov" class="ov" onclick="closeM()">
   <div class="modal" onclick="event.stopPropagation()">
-    <div class="mhead"><span class="mt" id="mtitle">3D 복원</span><button onclick="closePc()">✕</button></div>
-    <canvas id="pc" width="360" height="360"></canvas>
+    <div class="mhead"><span class="mt" id="mtitle">분석 보기</span><button onclick="closeM()">✕</button></div>
+    <div id="view3d" style="display:none">
+      <canvas id="pc" width="360" height="360"></canvas>
+    </div>
+    <div id="viewrg" style="display:none">
+      <div class="tabs" id="rgtabs"></div>
+      <canvas id="rg" width="360" height="360"></canvas>
+      <div class="rgdesc" id="rgdesc"></div>
+    </div>
     <div class="mmsg" id="mmsg">불러오는 중…</div>
   </div>
 </div>
 <script>
-  var raf = null;
-  function closePc(){ document.getElementById('ov').classList.remove('show'); if(raf){ cancelAnimationFrame(raf); raf=null; } }
+  // 앱(리포트 화면)과 똑같은 분석 부위 설정입니다.
+  // points: 강조 점 / pairs: 좌우로 잇는 짝 / midline: 중앙 기준선 표시
+  var SCORE_DETAIL = {
+    symmetry: { label:'비대칭(대칭)',
+      points:[33,263,133,362,61,291,105,334,129,358,50,280],
+      pairs:[[33,263],[133,362],[61,291],[105,334],[129,358],[50,280]], midline:true,
+      desc:'좌우 짝이 되는 눈·눈썹·입꼬리·코·볼의 위치가 중앙선을 기준으로 얼마나 대칭인지 봅니다. 양쪽(초록 선) 점이 대칭일수록 점수가 높아요.' },
+    balance: { label:'부기(좌우 폭)',
+      points:[234,454,10,152], pairs:[[234,454]], midline:true,
+      desc:'얼굴 중앙선에서 왼쪽·오른쪽 끝(볼)까지의 폭을 비교해 한쪽이 부었는지 봅니다. 양쪽 폭(초록 선)이 비슷할수록 점수가 높아요.' },
+    dark_circle: { label:'다크서클',
+      points:[145,374,50,280],
+      desc:'눈 아래(노란 점)와 볼(주황 점)의 밝기를 비교합니다. 눈 밑이 볼보다 어두울수록 다크서클로 보고 점수가 낮아져요.' },
+    wrinkle: { label:'주름',
+      points:[151,9,33,263,205,425],
+      desc:'이마·미간·눈가·팔자(노란 점) 부위의 잔주름(결)을 매끈한 볼과 비교합니다. 결이 많을수록 점수가 낮아져요.' }
+  };
+  var METRIC_ORDER = ['symmetry','balance','dark_circle','wrinkle'];
+
+  var raf = null;             // 3D 회전 애니메이션 핸들
+  var rgImg = null;           // 분석 부위용 얼굴 이미지
+  var rgLm = null;            // 분석 부위용 특징점
+  var rgMetric = 'symmetry';  // 현재 보고 있는 분석 항목
+
+  function closeM(){
+    document.getElementById('ov').classList.remove('show');
+    if(raf){ cancelAnimationFrame(raf); raf=null; }
+  }
+  function showView(which){
+    document.getElementById('view3d').style.display = (which==='3d') ? 'block' : 'none';
+    document.getElementById('viewrg').style.display = (which==='rg') ? 'block' : 'none';
+  }
+
+  // ── 3D 복원 보기 ──
   async function open3D(id, label){
     var ov = document.getElementById('ov'); ov.classList.add('show');
-    document.getElementById('mtitle').textContent = '3D 복원 · ' + label;
+    showView('3d');
+    document.getElementById('mtitle').textContent = '🧊 3D 복원 · ' + label;
     var msg = document.getElementById('mmsg'); msg.textContent = '3D 복원 중… (얼굴 점 추출)';
     if(raf){ cancelAnimationFrame(raf); raf=null; }
     var ctx = document.getElementById('pc').getContext('2d'); ctx.clearRect(0,0,360,360);
@@ -1175,15 +1359,93 @@ def gallery():
     }
     frame();
   }
-  document.querySelectorAll('.card').forEach(function(el){
-    el.addEventListener('click', function(){ open3D(el.dataset.id, el.dataset.label || '분석'); });
+
+  // ── 분석 부위 보기 ──
+  async function openRegion(id, label, imgSrc){
+    var ov = document.getElementById('ov'); ov.classList.add('show');
+    showView('rg');
+    if(raf){ cancelAnimationFrame(raf); raf=null; }
+    document.getElementById('mtitle').textContent = '📍 분석 부위 · ' + label;
+    var msg = document.getElementById('mmsg'); msg.textContent = '분석 부위를 불러오는 중…';
+    rgImg = null; rgLm = null; rgMetric = 'symmetry';
+    buildTabs();
+    try {
+      // 얼굴 사진과 특징점을 함께 불러옵니다.
+      var imgP = new Promise(function(resolve, reject){
+        var im = new Image(); im.onload = function(){ resolve(im); }; im.onerror = reject; im.src = imgSrc;
+      });
+      var lmP = fetch('/scan/' + id + '/landmarks').then(function(r){ return r.json(); });
+      var arr = await Promise.all([imgP, lmP]);
+      rgImg = arr[0];
+      var d = arr[1];
+      if(!d.detected){ msg.textContent = d.message || '이 사진에서는 분석 부위를 표시할 수 없어요.'; return; }
+      rgLm = d.landmarks;
+      msg.textContent = '점을 누르면 항목별 분석 부위를 볼 수 있어요.';
+      drawRegion();
+    } catch(e){ msg.textContent = '불러오지 못했어요. 잠시 후 다시 시도해 주세요.'; }
+  }
+  function buildTabs(){
+    var box = document.getElementById('rgtabs'); box.innerHTML = '';
+    METRIC_ORDER.forEach(function(k){
+      var b = document.createElement('button');
+      b.textContent = SCORE_DETAIL[k].label;
+      if(k===rgMetric) b.className = 'on';
+      b.addEventListener('click', function(){ rgMetric = k; buildTabs(); drawRegion(); });
+      box.appendChild(b);
+    });
+  }
+  function drawRegion(){
+    if(!rgImg || !rgLm) return;
+    var c = document.getElementById('rg'), ctx = c.getContext('2d');
+    // 사진 비율에 맞춰 캔버스 크기 조정
+    var W = 360, H = Math.round(360 * (rgImg.height / rgImg.width));
+    c.width = W; c.height = H;
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(rgImg, 0, 0, W, H);
+    var cfg = SCORE_DETAIL[rgMetric];
+    var lm = rgLm;
+    // 중앙 기준선 (점 10·1·152 의 평균 x)
+    if(cfg.midline){
+      var ids = [10,1,152].filter(function(i){ return lm[i]; });
+      var mx = 0; ids.forEach(function(i){ mx += lm[i].x; }); mx /= (ids.length || 1);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(251,191,36,0.8)'; ctx.lineWidth = 1; ctx.setLineDash([5,5]);
+      ctx.beginPath(); ctx.moveTo(mx*W, 0); ctx.lineTo(mx*W, H); ctx.stroke();
+      ctx.restore();
+    }
+    // 좌우 짝을 잇는 선(초록)
+    (cfg.pairs || []).forEach(function(pr){
+      var a = lm[pr[0]], b = lm[pr[1]];
+      if(a && b){
+        ctx.strokeStyle = 'rgba(52,211,153,0.9)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(a.x*W, a.y*H); ctx.lineTo(b.x*W, b.y*H); ctx.stroke();
+      }
+    });
+    // 강조 점(노란 원 + 어두운 테두리)
+    cfg.points.forEach(function(i){
+      var p = lm[i];
+      if(p){
+        ctx.beginPath(); ctx.arc(p.x*W, p.y*H, 4.5, 0, Math.PI*2);
+        ctx.fillStyle = '#fbbf24'; ctx.fill();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = '#09090b'; ctx.stroke();
+      }
+    });
+    document.getElementById('rgdesc').textContent = cfg.desc;
+  }
+
+  // 버튼 연결
+  document.querySelectorAll('.btn3d').forEach(function(el){
+    el.addEventListener('click', function(e){ e.stopPropagation(); open3D(el.dataset.id, el.dataset.label || '분석'); });
+  });
+  document.querySelectorAll('.btnrg').forEach(function(el){
+    el.addEventListener('click', function(e){ e.stopPropagation(); openRegion(el.dataset.id, el.dataset.label || '분석', el.dataset.img); });
   });
 </script>
 </body></html>"""
 
     html = (
         head
-        + f'<div class="sub">최근 분석 사진 {len(rows)}장 (최신순) · 사진을 누르면 3D 복원이 보여요</div>'
+        + f'<div class="sub">최근 분석 사진 {len(rows)}장 (최신순) · 사진마다 <b>3D 복원</b>·<b>분석 부위</b>를 볼 수 있어요</div>'
         + f'<div class="grid">{body}</div>'
         + modal
     )
