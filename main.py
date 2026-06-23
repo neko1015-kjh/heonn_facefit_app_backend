@@ -61,6 +61,9 @@ def _init_db():
             care_side TEXT DEFAULT '',          -- 케어가 더 필요한 쪽
             signature TEXT DEFAULT '',          -- 동일인 판별용 얼굴 서명
             gender TEXT DEFAULT '',             -- 추정 성별(동일인 판별 보조)
+            age TEXT DEFAULT '',                -- 추정 나이대(참고용)
+            dark_circle INTEGER DEFAULT 0,      -- 다크서클 점수(높을수록 양호)
+            wrinkle INTEGER DEFAULT 0,          -- 주름 점수(높을수록 양호)
             user_id INTEGER DEFAULT 0,          -- 분석한 사용자(없으면 0)
             image_filename TEXT NOT NULL,       -- 사진 식별용 이름
             image_data {db.BLOB}                -- 사진 바이너리 (영구 저장)
@@ -80,6 +83,12 @@ def _init_db():
             conn.execute("ALTER TABLE scans ADD COLUMN signature TEXT DEFAULT ''")
         if "gender" not in existing:
             conn.execute("ALTER TABLE scans ADD COLUMN gender TEXT DEFAULT ''")
+        if "age" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN age TEXT DEFAULT ''")
+        if "dark_circle" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN dark_circle INTEGER DEFAULT 0")
+        if "wrinkle" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN wrinkle INTEGER DEFAULT 0")
         if "user_id" not in existing:
             conn.execute("ALTER TABLE scans ADD COLUMN user_id INTEGER DEFAULT 0")
         if "image_data" not in existing:
@@ -130,6 +139,9 @@ def _init_db():
     # (PostgreSQL은 ADD COLUMN IF NOT EXISTS 를 지원하므로 안전하게 추가됩니다)
     if db.USE_PG:
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS age TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS dark_circle INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS wrinkle INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS care_side TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS signature TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 0")
@@ -195,6 +207,29 @@ except Exception as e:
     print("성별 모델 준비 실패(성별 추정 비활성):", e)
     gender_net = None
 
+# 나이 추정 모델(OpenCV용 Caffe) — 성별 모델과 같은 곳/같은 방식. 8개 나이대 구간을 출력합니다.
+# (참고용 추정으로만 사용 — 정확한 실제 나이가 아님)
+AGE_PROTO_URL = "https://github.com/smahesh29/Gender-and-Age-Detection/raw/master/age_deploy.prototxt"
+AGE_MODEL_URL = "https://github.com/smahesh29/Gender-and-Age-Detection/raw/master/age_net.caffemodel"
+AGE_PROTO_PATH = os.path.join(BASE_DIR, "age_deploy.prototxt")
+AGE_MODEL_PATH = os.path.join(BASE_DIR, "age_net.caffemodel")
+AGE_LIST = ["0-2세", "4-6세", "8-12세", "15-20세", "25-32세", "38-43세", "48-53세", "60세 이상"]
+
+age_net = None
+try:
+    if not os.path.exists(AGE_PROTO_PATH):
+        print("나이 모델(구조) 다운로드 중...")
+        urllib.request.urlretrieve(AGE_PROTO_URL, AGE_PROTO_PATH)
+    if not os.path.exists(AGE_MODEL_PATH):
+        print("나이 모델(가중치) 다운로드 중...")
+        urllib.request.urlretrieve(AGE_MODEL_URL, AGE_MODEL_PATH)
+    age_net = cv2.dnn.readNetFromCaffe(AGE_PROTO_PATH, AGE_MODEL_PATH)
+    print("나이 모델 준비 완료")
+except Exception as e:
+    # 나이 모델 로드 실패해도 서버는 정상 동작(나이 추정만 비활성).
+    print("나이 모델 준비 실패(나이 추정 비활성):", e)
+    age_net = None
+
 
 def _estimate_gender(image, face, w, h):
     """얼굴 영역을 잘라 성별('Male'/'Female')을 추정합니다. 실패 시 ''."""
@@ -214,6 +249,28 @@ def _estimate_gender(image, face, w, h):
         gender_net.setInput(blob)
         pred = gender_net.forward()
         return GENDER_LIST[int(pred[0].argmax())]
+    except Exception:
+        return ""
+
+
+def _estimate_age(image, face, w, h):
+    """얼굴 영역을 잘라 나이대('25-32세' 등)를 추정합니다. 실패 시 ''. (참고용 추정)"""
+    if age_net is None:
+        return ""
+    xs = [p.x for p in face]
+    ys = [p.y for p in face]
+    x1 = max(0, int(min(xs) * w))
+    x2 = min(w, int(max(xs) * w))
+    y1 = max(0, int(min(ys) * h))
+    y2 = min(h, int(max(ys) * h))
+    crop = image[y1:y2, x1:x2]
+    if crop.size == 0:
+        return ""
+    try:
+        blob = cv2.dnn.blobFromImage(crop, 1.0, (227, 227), GENDER_MEAN, swapRB=False)
+        age_net.setInput(blob)
+        pred = age_net.forward()
+        return AGE_LIST[int(pred[0].argmax())]
     except Exception:
         return ""
 
@@ -595,6 +652,72 @@ def _compute_skin_tone(image, face, w, h):
     return {"brightness": brightness, "redness": redness}
 
 
+def _gray_patch(gray, cx, cy, w, h, rad):
+    """정규화 좌표(cx, cy) 주변의 작은 사각형 영역(밝기/텍스처 표본)을 잘라 돌려줍니다."""
+    x, y = int(cx * w), int(cy * h)
+    x0, x1 = max(0, x - rad), min(w, x + rad)
+    y0, y1 = max(0, y - rad), min(h, y + rad)
+    return gray[y0:y1, x0:x1]
+
+
+def _compute_dark_circles(image, face, w, h):
+    """
+    눈밑(다크서클)과 볼의 밝기를 비교해 다크서클 점수를 냅니다. (0~100, 높을수록 양호=옅음)
+    눈밑이 볼보다 어두울수록 점수가 낮아집니다. (참고용 추정)
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    fw = abs(face[454].x - face[234].x) * w
+    rad = max(3, int(fw * 0.045))
+
+    def under(lid_idx, cheek_idx):
+        cx = face[lid_idx].x * 0.6 + face[cheek_idx].x * 0.4
+        cy = face[lid_idx].y * 0.6 + face[cheek_idx].y * 0.4
+        return _gray_patch(gray, cx, cy, w, h, rad)
+
+    ul, ur = under(145, 50), under(374, 280)
+    cl = _gray_patch(gray, face[50].x, face[50].y, w, h, rad)
+    cr = _gray_patch(gray, face[280].x, face[280].y, w, h, rad)
+    if min(ul.size, ur.size, cl.size, cr.size) == 0:
+        return 0
+    under_m = float(np.mean([ul.mean(), ur.mean()]))
+    cheek_m = float(np.mean([cl.mean(), cr.mean()]))
+    rel = max(0.0, (cheek_m - under_m) / (cheek_m + 1e-6))  # 눈밑이 더 어두운 비율
+    return round(max(0.0, min(100.0, 100.0 - rel * 240.0)))
+
+
+def _compute_wrinkles(image, face, w, h):
+    """
+    이마·미간·눈가·팔자 부위의 잔주름(텍스처)을 매끈한 볼과 비교해 주름 점수를 냅니다.
+    (0~100, 높을수록 양호=매끈) 텍스처가 볼보다 많을수록 점수가 낮아집니다. (참고용 추정)
+    사진 선명도 영향을 줄이려 '매끈한 볼' 기준으로 상대 비교합니다.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    fw = abs(face[454].x - face[234].x) * w
+    rad = max(3, int(fw * 0.045))
+
+    def lapvar(cx, cy):
+        p = _gray_patch(gray, cx, cy, w, h, rad)
+        if p.size < 9:
+            return None
+        return float(cv2.Laplacian(p, cv2.CV_32F).var())
+
+    regions = [
+        lapvar(face[151].x, face[151].y),          # 이마 중앙
+        lapvar(face[9].x, face[9].y),               # 미간
+        lapvar(face[33].x - 0.02, face[33].y),      # 왼쪽 눈가
+        lapvar(face[263].x + 0.02, face[263].y),    # 오른쪽 눈가
+        lapvar(face[205].x, face[205].y),           # 왼쪽 팔자
+        lapvar(face[425].x, face[425].y),           # 오른쪽 팔자
+    ]
+    regions = [v for v in regions if v is not None]
+    base = [lapvar(face[50].x, face[50].y), lapvar(face[280].x, face[280].y)]
+    base = [v for v in base if v is not None]
+    if not regions or not base:
+        return 0
+    ratio = (sum(regions) / len(regions)) / (sum(base) / len(base) + 1e-6)
+    return round(max(0.0, min(100.0, 100.0 - (ratio - 1.0) * 18.0)))
+
+
 def _validate_face(face, w, h):
     """
     검출된 얼굴이 '분석 가능한 정확한 정면 얼굴'인지 확인합니다.
@@ -723,6 +846,9 @@ def _detect_and_score(raw):
     skin = _compute_skin_tone(image, face, width, height)
     signature = _compute_signature(face, width, height)
     gender = _estimate_gender(image, face, width, height)
+    age = _estimate_age(image, face, width, height)
+    dark_circle = _compute_dark_circles(image, face, width, height)
+    wrinkle = _compute_wrinkles(image, face, width, height)
     # 화면 표시용 좌표. x, y는 0~1 비율, z는 상대 깊이(간이 3D 표시에 사용).
     landmarks = [{"x": round(p.x, 4), "y": round(p.y, 4), "z": round(p.z, 4)} for p in face]
     return {
@@ -733,21 +859,30 @@ def _detect_and_score(raw):
         "skin": skin,
         "signature": signature,
         "gender": gender,
+        "age": age,                  # 추정 나이대(참고용)
+        "dark_circle": dark_circle,  # 다크서클 점수(높을수록 양호)
+        "wrinkle": wrinkle,          # 주름 점수(높을수록 양호)
         "pose": pose,  # 머리 각도(정면 정도) — 측정 보정·검증용
         "landmark_count": len(face),
         "landmarks": landmarks,
     }
 
 
-def _score_list(symmetry, balance):
-    """점수를 앱이 쓰기 좋은 목록 형태로 만듭니다."""
-    return [
+def _score_list(symmetry, balance, dark_circle=None, wrinkle=None):
+    """점수를 앱이 쓰기 좋은 목록 형태로 만듭니다. (다크서클·주름은 값이 있을 때만 추가)"""
+    items = [
         {"key": "symmetry", "label": "안면 비대칭 개선도", "value": symmetry},
         {"key": "balance", "label": "좌우 균형 (부기)", "value": balance},
     ]
+    if dark_circle is not None:
+        items.append({"key": "dark_circle", "label": "다크서클", "value": dark_circle})
+    if wrinkle is not None:
+        items.append({"key": "wrinkle", "label": "주름", "value": wrinkle})
+    return items
 
 
-def _record_dict(rid, created_at, symmetry, balance, image_filename, care_side="", signature_json=""):
+def _record_dict(rid, created_at, symmetry, balance, image_filename, care_side="", signature_json="",
+                 dark_circle=None, wrinkle=None, age=""):
     """이력 한 건을 앱에 돌려줄 형태로 정리합니다."""
     try:
         signature = json.loads(signature_json) if signature_json else []
@@ -757,9 +892,10 @@ def _record_dict(rid, created_at, symmetry, balance, image_filename, care_side="
         "id": rid,
         "created_at": created_at,
         "image_url": f"/uploads/{image_filename}",
-        "scores": _score_list(symmetry, balance),
+        "scores": _score_list(symmetry, balance, dark_circle, wrinkle),
         "care_side": care_side,
         "signature": signature,
+        "age": age or "",
     }
 
 
@@ -775,7 +911,8 @@ async def analyze_face(file: UploadFile = File(...)):
         "detected": True,
         "message": "얼굴 점수 분석이 완료되었습니다.",
         "image_size": {"width": res["width"], "height": res["height"]},
-        "scores": _score_list(res["scores"]["symmetry"], res["scores"]["balance"]),
+        "scores": _score_list(res["scores"]["symmetry"], res["scores"]["balance"], res["dark_circle"], res["wrinkle"]),
+        "age": res.get("age", ""),
     }
 
 
@@ -836,15 +973,18 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     brightness = res["skin"]["brightness"]
     redness = res["skin"]["redness"]
     signature_json = json.dumps(res["signature"])
+    age = res.get("age", "")
+    dark_circle = res.get("dark_circle", 0)
+    wrinkle = res.get("wrinkle", 0)
 
     # 데이터베이스에 기록 + 사진 바이너리를 함께 저장합니다. (재시작해도 사진 유지)
     conn = db.connect()
     cur = conn.execute(
         """
-        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, gender, image_filename, user_id, image_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, gender, age, dark_circle, wrinkle, image_filename, user_id, image_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
         """,
-        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, cur_gender, filename, user_id, raw),
+        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, cur_gender, age, dark_circle, wrinkle, filename, user_id, raw),
     )
     new_id = cur.fetchone()[0]
     conn.commit()
@@ -857,7 +997,8 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
         "landmark_count": res["landmark_count"],
         "image_size": {"width": res["width"], "height": res["height"]},
         "landmarks": res["landmarks"],
-        "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side, signature_json),
+        "age": age,
+        "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side, signature_json, dark_circle, wrinkle, age),
     }
 
 
@@ -877,7 +1018,8 @@ def gallery():
     conn = db.connect()
     rows = conn.execute(
         """
-        SELECT s.id, s.created_at, s.image_filename, s.symmetry, s.balance, s.gender, u.display_name
+        SELECT s.id, s.created_at, s.image_filename, s.symmetry, s.balance, s.gender,
+               s.age, s.dark_circle, s.wrinkle, u.display_name
         FROM scans s LEFT JOIN users u ON s.user_id = u.id
         WHERE s.image_data IS NOT NULL
         ORDER BY s.id DESC LIMIT 200
@@ -891,13 +1033,19 @@ def gallery():
 
     cards = []
     for r in rows:
-        rid, created_at, fname, symmetry, balance, gender, name = r
+        rid, created_at, fname, symmetry, balance, gender, age, dark_circle, wrinkle, name = r
         who = esc(name or "게스트")
+        extra = ""
+        if gender:
+            extra += " · " + esc(gender)
+        if age:
+            extra += " · " + esc(age)
         cards.append(
             f'<figure class="card" data-id="{rid}" data-label="{who}">'
             f'<img loading="lazy" src="/uploads/{fname}" alt="분석 사진"/>'
             f'<figcaption><b>{who}</b> · {created_at}<br/>'
-            f'비대칭 {symmetry} · 부기 {balance}{(" · " + esc(gender)) if gender else ""}'
+            f'비대칭 {symmetry} · 부기 {balance}{extra}<br/>'
+            f'다크서클 {dark_circle} · 주름 {wrinkle}'
             f'<span class="hint">👆 클릭 → 3D 복원 보기</span></figcaption>'
             f'</figure>'
         )
@@ -1047,7 +1195,7 @@ def get_history(authorization: str = Header(None)):
     conn = db.connect()
     rows = conn.execute(
         """
-        SELECT id, created_at, symmetry, balance, image_filename, care_side, signature
+        SELECT id, created_at, symmetry, balance, image_filename, care_side, signature, dark_circle, wrinkle, age
         FROM scans WHERE user_id = ? ORDER BY id DESC
         """,
         (user_id,),
