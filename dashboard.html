@@ -101,6 +101,7 @@
   .road-item.has-detail { cursor: pointer; transition: border-color .15s, background .15s; }
   .road-item.has-detail:hover { border-color: var(--amber); background: #1f1f23; }
   .dhint { display: block; margin-top: 6px; color: var(--amber); font-size: 11px; font-weight: 700; text-decoration: none; }
+  .ddate { display: inline-block; margin-top: 6px; color: var(--faint); font-size: 11px; font-weight: 600; text-decoration: none; background: var(--surface2); border-radius: 6px; padding: 2px 8px; }
   .dlg-ov { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
   .dlg-ov.show { display: flex; }
   .dlg { background: var(--surface); border: 1px solid var(--border2); border-radius: 16px; max-width: 520px; width: 100%; max-height: 82vh; overflow-y: auto; padding: 22px; }
@@ -522,16 +523,58 @@
   }
   function closeDlg() { document.getElementById('dlgov').classList.remove('show'); }
 
-  // 완료 항목 중 설명이 있는 것만 클릭 가능하게 만들고, '개발 내용 보기 ▸' 안내를 붙입니다.
+  // 완료 항목별 '적용(배포) 날짜'. match 글이 항목에 들어가면 그 날짜를 붙입니다(위에서부터 우선).
+  var DATES = [
+    { d: '2026-06-25', m: ['점수식 근거화'] },
+    { d: '2026-06-25', m: ['재현성'] },
+    { d: '2026-06-25', m: ['조명 보정'] },
+    { d: '2026-06-25', m: ['각도 보정'] },
+    { d: '2026-06-25', m: ['측정 보정 표시', '측정 신뢰도', 'v12'] },
+    { d: '2026-06-23', m: ['분석 부위 보기'] },
+    { d: '2026-06-23', m: ['로그인 계정 히스토리', '/logins'] },
+    { d: '2026-06-23', m: ['카카오 로그인', 'v11'] },
+    { d: '2026-06-23', m: ['약관', '동의 절차', 'v10'] },
+    { d: '2026-06-23', m: ['스크롤', 'v9'] },
+    { d: '2026-06-23', m: ['버전 표시', 'v8'] },
+    { d: '2026-06-23', m: ['리포트 점수 클릭', 'v7'] },
+    { d: '2026-06-23', m: ['추정 나이대', '나이 추정', 'v6'] },
+    { d: '2026-06-23', m: ['주름·다크서클·나이'] },
+    { d: '2026-06-22', m: ['정면 게이팅', '머리 각도'] },
+    { d: '2026-06-22', m: ['헤은 로고', '아이콘', 'v5'] },
+    { d: '2026-06-22', m: ['얼굴 영역만', 'v4'] },
+    { d: '2026-06-22', m: ['업로드 방식', 'v3'] },
+    { d: '2026-06-22', m: ['콜드스타트', 'v2'] },
+    { d: '2026-06-22', m: ['3D 복원', '예외 처리'] },
+    { d: '2026-06-20', m: ['대시보드 페이지', '서비스 대시보드', 'DB 계정', '구글 로그인'] },
+    { d: '2026-06-19', m: ['갤러리 페이지', '영구 저장', 'PostgreSQL'] }
+  ];
+  function findDate(t) {
+    for (var i = 0; i < DATES.length; i++) {
+      var m = DATES[i].m;
+      for (var j = 0; j < m.length; j++) { if (t.indexOf(m[j]) >= 0) return DATES[i].d; }
+    }
+    return null;
+  }
+  // 완료 항목에 적용 날짜 배지를 붙이고, 설명이 있으면 클릭 가능하게 만듭니다.
   document.querySelectorAll('.road-item.done').forEach(function (el) {
-    var key = findDetailKey(el.textContent);
-    if (!key) return;
-    el.classList.add('has-detail');
-    var hint = document.createElement('span');
-    hint.className = 'dhint';
-    hint.textContent = '개발 내용 보기 ▸';
-    (el.querySelector('.t') || el).appendChild(hint);
-    el.addEventListener('click', function () { openDlg(key); });
+    var txt = el.textContent;
+    var t = el.querySelector('.t') || el;
+    var dt = findDate(txt);
+    if (dt) {
+      var ds = document.createElement('span');
+      ds.className = 'ddate';
+      ds.textContent = '📅 적용 ' + dt;
+      t.appendChild(ds);
+    }
+    var key = findDetailKey(txt);
+    if (key) {
+      el.classList.add('has-detail');
+      var hint = document.createElement('span');
+      hint.className = 'dhint';
+      hint.textContent = '개발 내용 보기 ▸';
+      t.appendChild(hint);
+      el.addEventListener('click', function () { openDlg(key); });
+    }
   });
 </script>
 <script>
