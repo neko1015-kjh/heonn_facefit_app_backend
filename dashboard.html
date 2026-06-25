@@ -361,7 +361,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">부위별 처방(Zone) 정확도 평가셋 + /zone <span class="sub">케어 부위 지목 정확도 94% — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">주름 점수 안정화 <span class="sub">밝기 정규화+볼 기준 하한 — 재촬영 흔들림 std 5.0→3.4(변별력 유지) — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">부위별 처방(Zone) 정확도 평가셋 + /zone <span class="sub">케어 부위 지목 정확도 94%</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">검출률·정확도 평가셋 + /accuracy <span class="sub">검출 100%·거부 100%·대칭정확도 97.9</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">성능·동시 접속 <span class="sub">사진 다운스케일(231→131ms)·검출 잠금·분석 스레드 오프로드</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">점수식 근거화 <span class="sub">측정값(%·배)+정상범위 기준점으로 점수 재설계 + 근거값 표시</span></span></div>
@@ -477,6 +478,10 @@
       body: '<p><b>문제</b> — 피부 밝기·붉은기를 색의 절대값으로 재다 보니, 따뜻한 조명에선 멀쩡한 피부가 "홍조"로, 어두운 곳에선 "어두운 톤"으로 잘못 잡혔어요.</p>'
         + '<p><b>어떻게</b> — ① <b>그레이월드</b>로 조명의 색 기운(따뜻/차가움)을 중화하고 ② <b>밝기 정규화</b>로 노출 차이를 줄인 뒤 피부색을 쟀습니다.</p>'
         + '<p><b>검증</b> — 같은 얼굴에 조명 15종을 입혀 측정: 흔들림이 밝기 <span class="num">std 30.8→12.1</span>, 붉은기 <span class="num">23.9→6.6</span>으로 크게 안정됐어요. (보정 후 값 스케일에 맞춰 추천·라벨 기준도 조정)</p>' },
+    wrinklestab: { match: ['주름 점수 안정화', '주름 안정화'], title: '주름 점수 안정화',
+      body: '<p><b>문제</b> — 재현성 측정에서 주름 점수가 같은 사람 재촬영에도 크게 출렁이는 게 드러났어요(작은 패치 하나의 텍스처라 위치·밝기·잡티에 민감).</p>'
+        + '<p><b>어떻게</b> — ① 텍스처를 <b>밝기로 정규화</b>(라플라시안 분산 ÷ 밝기²)해 노출·밝기 변화에 안 휘둘리게 ② 매끈한 볼 기준값에 <b>하한</b>을 둬 너무 매끈한 볼로 나눠 비율이 폭발하는 걸 방지.</p>'
+        + '<p><b>결과</b> — 재촬영 흔들림 <span class="num">std 5.0 → 3.4</span>로 안정화, 매끈/주름 구분(변별력)은 그대로 유지. (/stability에서 확인)</p>' },
     zone: { match: ['부위별 처방·Zone', '부위별 처방(Zone)', 'Zone 정확도'], title: '부위별 처방(Zone) 정확도',
       body: '<p><b>무엇</b> — 엔진이 \'어느 쪽을 케어해야 하는지\'(좌/우)를 정확히 짚는지 평가해요.</p>'
         + '<p><b>어떻게</b> — 실제 얼굴의 한쪽 절반을 13% 넓혀 <b>\'한쪽이 부은 얼굴\'</b>을 만들면 정답은 \'그 부은 쪽 케어\'. 엔진이 매긴 케어 부위가 부푼 쪽과 일치하는지 셉니다.</p>'
@@ -560,6 +565,7 @@
 
   // 완료 항목별 '적용(배포) 날짜'. match 글이 항목에 들어가면 그 날짜를 붙입니다(위에서부터 우선).
   var DATES = [
+    { d: '2026-06-25', m: ['주름 점수 안정화', '주름 안정화'] },
     { d: '2026-06-25', m: ['부위별 처방·Zone', '부위별 처방(Zone)', 'Zone 정확도'] },
     { d: '2026-06-25', m: ['검출률·정확도 평가'] },
     { d: '2026-06-25', m: ['처리 속도·동시 접속', '성능·동시 접속'] },
