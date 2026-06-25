@@ -220,7 +220,7 @@
 
   <div class="section-title">📋 개발 로드맵 (전체 할 일)</div>
   <div class="progress-bar"><div class="progress-fill"></div></div>
-  <div class="progress-text">앱 핵심 기능 약 <b>95%</b> 완료 · 현재 <b>AI 엔진 보강 단계</b> 진행(1순위 정확도·일관성 1·2·3단계 완료)</div>
+  <div class="progress-text">앱 핵심 기능 약 <b>95%</b> 완료 · 현재 <b>AI 엔진 보강 단계</b> 진행(1순위 정확도·일관성 완료: 1·2·3단계+점수식 근거화 / 2순위 진행 중)</div>
 
   <div class="road-group">
     <h3 class="rg-done">✅ 완료</h3>
@@ -271,7 +271,7 @@
     <div class="road-item done"><span class="ck">✅</span><span class="t">1단계: 머리 각도(포즈) 측정 + 정면 게이팅 <span class="sub">고개 돌아간 사진 거르기 — 배포 완료</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">2단계: 점수 각도 보정(roll) <span class="sub">얼굴을 똑바로 세워 계산 → 고개 기울여도 같은 점수. 검증: 같은 얼굴 ±15° 기울임 시 비대칭 변동 52점→2점 — 배포 완료</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">3단계: 조명 보정 피부톤 <span class="sub">그레이월드+밝기정규화로 조명(색·노출) 영향 제거. 검증: 같은 얼굴 조명 15종 흔들림 밝기 std 30.8→12.1·붉은기 23.9→6.6 — 배포 완료</span></span></div>
-    <div class="road-item"><span class="ck">📋</span><span class="t">점수식 근거화 <span class="sub">각도(°)·비율(%) 등 실제 의미·정상범위 기반 재설계</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">점수식 근거화 <span class="sub">임의 상수 대신 측정값(%·배)+정상범위 기준점으로 재설계. 각 점수에 근거값(예: 좌우 폭 차이 5.9%) 표시 — 배포 완료</span></span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-todo">🥈 2순위 · 검증 체계 (LG 지표 실측)</h3>
@@ -340,7 +340,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">측정 재현성 수치화 + /stability 페이지 <span class="sub">반복 촬영 안정성: 비대칭98·부기94·다크서클99·주름82점 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">점수식 근거화 <span class="sub">측정값(%·배)+정상범위 기준점으로 점수 재설계 + 근거값 표시 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">측정 재현성 수치화 + /stability 페이지 <span class="sub">반복 촬영 안정성: 비대칭98·부기94·다크서클99·주름82점</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">조명 보정 피부톤 <span class="sub">그레이월드+밝기정규화 — 조명 흔들림 밝기 std 30.8→12.1·붉은기 23.9→6.6</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">점수 각도 보정(roll) <span class="sub">얼굴 똑바로 세워 계산 — 기울임 왜곡 제거(비대칭 변동 52점→2점)</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">로그인 계정 히스토리 페이지(/logins) <span class="sub">계정·방식·동의·분석 횟수 표</span></span></div>
@@ -452,6 +453,10 @@
       body: '<p><b>문제</b> — 피부 밝기·붉은기를 색의 절대값으로 재다 보니, 따뜻한 조명에선 멀쩡한 피부가 "홍조"로, 어두운 곳에선 "어두운 톤"으로 잘못 잡혔어요.</p>'
         + '<p><b>어떻게</b> — ① <b>그레이월드</b>로 조명의 색 기운(따뜻/차가움)을 중화하고 ② <b>밝기 정규화</b>로 노출 차이를 줄인 뒤 피부색을 쟀습니다.</p>'
         + '<p><b>검증</b> — 같은 얼굴에 조명 15종을 입혀 측정: 흔들림이 밝기 <span class="num">std 30.8→12.1</span>, 붉은기 <span class="num">23.9→6.6</span>으로 크게 안정됐어요. (보정 후 값 스케일에 맞춰 추천·라벨 기준도 조정)</p>' },
+    ground: { match: ['점수식 근거화'], title: '점수식 근거화',
+      body: '<p><b>문제</b> — 점수가 \'100 − 오차 × 250\' 같은 <b>임의의 상수</b>로 만들어져, 왜 그 점수인지 근거가 약했어요.</p>'
+        + '<p><b>어떻게</b> — 먼저 <b>의미 있는 측정값</b>으로 바꿨어요: 비대칭=양쪽 차이 평균(%), 부기=좌우 얼굴 폭 차이(%), 다크서클=눈밑이 볼보다 어두운 정도(%), 주름=결이 볼의 몇 배(배). 그리고 \'이 값이면 몇 점\'이라는 <b>정상범위 기준점</b>에 맞춰 0~100점으로 환산합니다.</p>'
+        + '<p><b>결과</b> — 점수마다 <b>근거값</b>이 따라와요(예: "부기 56점 ← 좌우 폭 차이 15.1%"). 비대칭·다크서클·주름은 기존과 비슷하고, 부기는 폭 차이가 큰 얼굴에서 더 정직하게 반영됩니다.</p>' },
     repro: { match: ['재현성'], title: '측정 재현성 (반복 촬영 안정성)',
       body: '<p><b>무엇</b> — 같은 사람이 다시 찍어도 점수가 일정한지(측정 정밀도)를 수치로 잰 거예요.</p>'
         + '<p><b>어떻게</b> — 저장된 실제 얼굴에 \'다시 촬영\' 수준의 작은 변화(미세 회전·노출·색온도·거리·재압축) 8가지를 입혀 점수를 다시 계산하고, 그 흔들림(표준편차)을 평균냈습니다.</p>'
