@@ -91,6 +91,8 @@ def _init_db():
             conn.execute("ALTER TABLE scans ADD COLUMN dark_circle INTEGER DEFAULT 0")
         if "wrinkle" not in existing:
             conn.execute("ALTER TABLE scans ADD COLUMN wrinkle INTEGER DEFAULT 0")
+        if "basis" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN basis TEXT DEFAULT ''")
         if "user_id" not in existing:
             conn.execute("ALTER TABLE scans ADD COLUMN user_id INTEGER DEFAULT 0")
         if "image_data" not in existing:
@@ -146,6 +148,7 @@ def _init_db():
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS age TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS dark_circle INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS wrinkle INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS basis TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS care_side TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS signature TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 0")
@@ -1043,8 +1046,9 @@ def _detect_and_score(raw):
     }
 
 
-def _score_list(symmetry, balance, dark_circle=None, wrinkle=None):
-    """점수를 앱이 쓰기 좋은 목록 형태로 만듭니다. (다크서클·주름은 값이 있을 때만 추가)"""
+def _score_list(symmetry, balance, dark_circle=None, wrinkle=None, basis=None):
+    """점수를 앱이 쓰기 좋은 목록 형태로 만듭니다. (다크서클·주름은 값이 있을 때만 추가)
+    basis(근거값 dict)가 있으면 각 항목에 근거 문구를 붙입니다(예: '좌우 폭 차이 5.9%')."""
     items = [
         {"key": "symmetry", "label": "안면 비대칭 개선도", "value": symmetry},
         {"key": "balance", "label": "좌우 균형 (부기)", "value": balance},
@@ -1053,21 +1057,29 @@ def _score_list(symmetry, balance, dark_circle=None, wrinkle=None):
         items.append({"key": "dark_circle", "label": "다크서클", "value": dark_circle})
     if wrinkle is not None:
         items.append({"key": "wrinkle", "label": "주름", "value": wrinkle})
+    if basis:
+        for it in items:
+            if basis.get(it["key"]):
+                it["basis"] = basis[it["key"]]
     return items
 
 
 def _record_dict(rid, created_at, symmetry, balance, image_filename, care_side="", signature_json="",
-                 dark_circle=None, wrinkle=None, age=""):
+                 dark_circle=None, wrinkle=None, age="", basis_json=""):
     """이력 한 건을 앱에 돌려줄 형태로 정리합니다."""
     try:
         signature = json.loads(signature_json) if signature_json else []
     except (ValueError, TypeError):
         signature = []
+    try:
+        basis = json.loads(basis_json) if basis_json else None
+    except (ValueError, TypeError):
+        basis = None
     return {
         "id": rid,
         "created_at": created_at,
         "image_url": f"/uploads/{image_filename}",
-        "scores": _score_list(symmetry, balance, dark_circle, wrinkle),
+        "scores": _score_list(symmetry, balance, dark_circle, wrinkle, basis),
         "care_side": care_side,
         "signature": signature,
         "age": age or "",
@@ -1087,7 +1099,7 @@ async def analyze_face(file: UploadFile = File(...)):
         "detected": True,
         "message": "얼굴 점수 분석이 완료되었습니다.",
         "image_size": {"width": res["width"], "height": res["height"]},
-        "scores": _score_list(res["scores"]["symmetry"], res["scores"]["balance"], res["dark_circle"], res["wrinkle"]),
+        "scores": _score_list(res["scores"]["symmetry"], res["scores"]["balance"], res["dark_circle"], res["wrinkle"], res.get("basis")),
         "age": res.get("age", ""),
         "basis": res.get("basis"),  # 점수 근거(측정값+단위)
     }
@@ -1154,15 +1166,16 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     age = res.get("age", "")
     dark_circle = res.get("dark_circle", 0)
     wrinkle = res.get("wrinkle", 0)
+    basis_json = json.dumps(res.get("basis") or {}, ensure_ascii=False)
 
     # 데이터베이스에 기록 + 사진 바이너리를 함께 저장합니다. (재시작해도 사진 유지)
     conn = db.connect()
     cur = conn.execute(
         """
-        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, gender, age, dark_circle, wrinkle, image_filename, user_id, image_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, gender, age, dark_circle, wrinkle, basis, image_filename, user_id, image_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
         """,
-        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, cur_gender, age, dark_circle, wrinkle, filename, user_id, raw),
+        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, cur_gender, age, dark_circle, wrinkle, basis_json, filename, user_id, raw),
     )
     new_id = cur.fetchone()[0]
     conn.commit()
@@ -1184,7 +1197,7 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
             "light_corrected": True, # 조명 보정 피부톤(3단계) 적용
         },
         "basis": res.get("basis"),  # 점수 근거(측정값+단위) — 점수식 근거화
-        "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side, signature_json, dark_circle, wrinkle, age),
+        "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side, signature_json, dark_circle, wrinkle, age, basis_json),
     }
 
 
@@ -2140,7 +2153,7 @@ def get_history(authorization: str = Header(None)):
     conn = db.connect()
     rows = conn.execute(
         """
-        SELECT id, created_at, symmetry, balance, image_filename, care_side, signature, dark_circle, wrinkle, age
+        SELECT id, created_at, symmetry, balance, image_filename, care_side, signature, dark_circle, wrinkle, age, basis
         FROM scans WHERE user_id = ? ORDER BY id DESC
         """,
         (user_id,),
