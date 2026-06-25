@@ -102,6 +102,62 @@
   .road-item.has-detail:hover { border-color: var(--amber); background: #1f1f23; }
   .dhint { display: block; margin-top: 6px; color: var(--amber); font-size: 11px; font-weight: 700; text-decoration: none; }
   .ddate { display: inline-block; margin-top: 6px; color: var(--faint); font-size: 11px; font-weight: 600; text-decoration: none; background: var(--surface2); border-radius: 6px; padding: 2px 8px; }
+
+  /* 앱 UI/UX 리뉴얼 — 목업(예상 화면) */
+  .mock-item { cursor: pointer; }
+  .mock-item:hover { border-color: var(--amber); background: #1f1f23; }
+  .mockwrap { display: flex; flex-direction: column; align-items: center; }
+  .mph { width: 250px; background: #0d0d10; border: 1px solid #2a2a2e; border-radius: 32px; padding: 9px; box-shadow: 0 24px 60px rgba(0,0,0,.55); }
+  .mscr { position: relative; height: 452px; background: #0b0b0e; border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; }
+  .mstat { height: 22px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .mstat::before { content: ''; width: 64px; height: 5px; border-radius: 3px; background: #2a2a2e; }
+  .mbody { flex: 1; padding: 14px; overflow: hidden; }
+  .mnav { height: 50px; background: #161619; border-top: 1px solid #232327; display: flex; justify-content: space-around; align-items: center; flex-shrink: 0; }
+  .mnav i { width: 22px; height: 22px; border-radius: 7px; background: #2a2a2e; }
+  .mnav i.on { background: var(--amber); }
+  .m-greet { color: #a1a1aa; font-size: 11px; }
+  .m-h { color: #f4f4f5; font-size: 16px; font-weight: 800; margin: 2px 0 12px; }
+  .m-hero { background: linear-gradient(135deg, #3a2e12, #1a1813); border: 1px solid rgba(251,191,36,.4); border-radius: 16px; padding: 14px; margin-bottom: 10px; }
+  .m-hero .t { color: var(--amber); font-size: 13px; font-weight: 800; }
+  .m-hero .s { color: #d4d4d8; font-size: 10px; margin-top: 3px; line-height: 1.4; }
+  .m-hero .pill { display: inline-block; margin-top: 11px; background: var(--amber); color: #09090b; font-size: 10px; font-weight: 800; border-radius: 9px; padding: 6px 12px; }
+  .m-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .m-stat { flex: 1; background: #161619; border: 1px solid #232327; border-radius: 13px; padding: 11px; }
+  .m-stat .v { color: var(--amber); font-size: 19px; font-weight: 800; }
+  .m-stat .l { color: #71717a; font-size: 9px; margin-top: 2px; }
+  .m-quick { display: flex; gap: 8px; }
+  .m-q { flex: 1; background: #161619; border: 1px solid #232327; border-radius: 13px; padding: 12px 6px; text-align: center; color: #d4d4d8; font-size: 9px; }
+  .m-q .ic { width: 26px; height: 26px; border-radius: 9px; background: rgba(251,191,36,.15); margin: 0 auto 6px; }
+  .m-ring { width: 124px; height: 124px; border-radius: 50%; margin: 4px auto 14px; background: conic-gradient(var(--amber) 0 90%, #232327 90%); display: flex; align-items: center; justify-content: center; }
+  .m-ring .in { width: 96px; height: 96px; border-radius: 50%; background: #0b0b0e; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .m-ring .in .v { color: #f4f4f5; font-size: 30px; font-weight: 800; line-height: 1; }
+  .m-ring .in .l { color: #71717a; font-size: 9px; margin-top: 3px; }
+  .m-metric { display: flex; justify-content: space-between; align-items: center; background: #161619; border: 1px solid #232327; border-radius: 11px; padding: 9px 11px; margin-bottom: 6px; }
+  .m-metric .n { color: #d4d4d8; font-size: 10px; font-weight: 600; }
+  .m-metric .n small { display: block; color: #71717a; font-size: 8px; font-weight: 400; margin-top: 1px; }
+  .m-metric .vv { color: var(--amber); font-size: 14px; font-weight: 800; }
+  .m-chip { display: inline-block; background: rgba(52,211,153,.15); color: #34d399; font-size: 8px; font-weight: 700; border-radius: 999px; padding: 3px 8px; }
+  .m-cam { position: absolute; inset: 0; background: radial-gradient(circle at 50% 38%, #34343c, #0b0b0e 75%); }
+  .m-oval { position: absolute; top: 74px; left: 50%; transform: translateX(-50%); width: 138px; height: 178px; border: 2px dashed rgba(251,191,36,.75); border-radius: 50%; }
+  .m-camhint { position: absolute; top: 34px; width: 100%; text-align: center; color: #f4f4f5; font-size: 11px; font-weight: 600; }
+  .m-cambadge { position: absolute; top: 272px; width: 100%; display: flex; justify-content: center; gap: 5px; }
+  .m-cbtn { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); width: 58px; height: 58px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,.25); }
+  .m-sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #161619; border-top: 1px solid #2a2a2e; border-radius: 20px 20px 0 0; padding: 14px; }
+  .m-grab { width: 38px; height: 4px; border-radius: 3px; background: #3a3a40; margin: 0 auto 12px; }
+  .m-timer { width: 150px; height: 150px; border-radius: 50%; margin: 14px auto 16px; background: conic-gradient(var(--emerald) 0 64%, #232327 64%); display: flex; align-items: center; justify-content: center; }
+  .m-timer .in { width: 120px; height: 120px; border-radius: 50%; background: #0b0b0e; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .m-timer .v { color: #f4f4f5; font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .m-timer .l { color: #34d399; font-size: 9px; margin-top: 2px; }
+  .m-zones { display: flex; justify-content: center; gap: 6px; margin-bottom: 14px; }
+  .m-zone { width: 34px; height: 34px; border-radius: 10px; background: #161619; border: 1px solid #232327; }
+  .m-zone.on { background: rgba(52,211,153,.2); border-color: #34d399; }
+  .m-sw { display: flex; gap: 6px; margin-bottom: 12px; }
+  .m-sw span { flex: 1; height: 34px; border-radius: 8px; }
+  .m-type div { color: #f4f4f5; margin-bottom: 4px; }
+  .m-cmp { display: flex; gap: 6px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .mock-note { color: var(--muted); font-size: 12px; line-height: 1.7; margin-top: 12px; }
+  .mock-note b { color: var(--amber); }
+  .mock-note .tag { display:inline-block; background:rgba(96,165,250,.15); color:var(--blue); font-size:11px; border-radius:6px; padding:1px 7px; margin-right:4px; }
   .dlg-ov { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
   .dlg-ov.show { display: flex; }
   .dlg { background: var(--surface); border: 1px solid var(--border2); border-radius: 16px; max-width: 520px; width: 100%; max-height: 82vh; overflow-y: auto; padding: 22px; }
@@ -381,6 +437,16 @@
     <div class="road-item done"><span class="ck">✅</span><span class="t">대시보드 페이지 + DB 계정 정보 표시</span></div>
   </div>
 
+  <div class="section-title">📱 앱 UI/UX 리뉴얼 제안 <span class="section-note">(항목을 누르면 예상 화면이 떠요)</span></div>
+  <div class="progress-text">현재 화면: 인트로·로그인·동의·기기연결·<b>홈·AI스캔·케어·리포트·스토어</b> + 하단 탭. 기능은 갖춰졌고, 이제 <b>최신 모바일 스타일</b>(큰 둥근 카드·점수 링 차트·풀스크린 카메라/타이머·바텀시트·활성 알약 탭)로 보기 좋게 다듬는 단계예요. 아래는 화면별 리뉴얼 제안입니다.</div>
+  <div class="road-group">
+    <div class="road-item mock-item" onclick="openMock('home')"><span class="ck">🏠</span><span class="t">홈 — 카드형 대시보드 <span class="sub">오늘의 케어 + 최근 점수 요약 + 빠른 시작을 한눈에</span><span class="dhint">🖼️ 예상 화면 보기 ▸</span></span></div>
+    <div class="road-item mock-item" onclick="openMock('scan')"><span class="ck">📷</span><span class="t">AI 스캔 — 풀스크린 카메라 + 결과 바텀시트 <span class="sub">얼굴 가이드 오버레이·보정 배지, 결과는 아래에서 올라오는 시트</span><span class="dhint">🖼️ 예상 화면 보기 ▸</span></span></div>
+    <div class="road-item mock-item" onclick="openMock('report')"><span class="ck">📊</span><span class="t">리포트 — 점수 링 차트 + 근거 강조 <span class="sub">종합 점수 도넛, 항목별 카드에 근거값(좌우 폭 차이 등) 표시</span><span class="dhint">🖼️ 예상 화면 보기 ▸</span></span></div>
+    <div class="road-item mock-item" onclick="openMock('care')"><span class="ck">🔥</span><span class="t">케어 — 풀스크린 타이머 + 부위 맵 <span class="sub">원형 타이머·진행률, 케어 부위 하이라이트, 온도·진동 칩</span><span class="dhint">🖼️ 예상 화면 보기 ▸</span></span></div>
+    <div class="road-item mock-item" onclick="openMock('design')"><span class="ck">🎨</span><span class="t">디자인 시스템 — 색·타이포·컴포넌트 <span class="sub">통일된 색·글자 크기·버튼/칩/카드 규칙으로 일관성↑</span><span class="dhint">🖼️ 예상 화면 보기 ▸</span></span></div>
+  </div>
+
   <div class="section-title">👤 운영 계정 <span class="section-note">(카드의 "열기"로 관리 페이지 바로 이동)</span></div>
   <div class="card">
     <div class="icon">🤗</div>
@@ -463,7 +529,7 @@
 <div id="dlgov" class="dlg-ov" onclick="closeDlg()">
   <div class="dlg" onclick="event.stopPropagation()">
     <div class="dlg-head"><div class="dlg-title" id="dlgtitle"></div><button class="dlg-close" onclick="closeDlg()">✕</button></div>
-    <span class="dlg-tag">✅ 완료 · 개발 내용</span>
+    <span class="dlg-tag" id="dlgtag">✅ 완료 · 개발 내용</span>
     <div class="dlg-body" id="dlgbody"></div>
   </div>
 </div>
@@ -557,11 +623,64 @@
   }
   function openDlg(key) {
     var d = DETAILS[key]; if (!d) return;
+    document.getElementById('dlgtag').textContent = '✅ 완료 · 개발 내용';
     document.getElementById('dlgtitle').textContent = d.title;
     document.getElementById('dlgbody').innerHTML = d.body;
     document.getElementById('dlgov').classList.add('show');
   }
   function closeDlg() { document.getElementById('dlgov').classList.remove('show'); }
+
+  // 앱 UI/UX 리뉴얼 — 항목 클릭 시 예상 화면(CSS 목업)을 보여줍니다.
+  var MOCKUPS = {
+    home: { title: '홈 — 카드형 대시보드',
+      body: '<div class="mockwrap"><div class="mph"><div class="mscr"><div class="mstat"></div>'
+        + '<div class="mbody"><div class="m-greet">안녕하세요 👋</div><div class="m-h">오늘도 갸름하게</div>'
+        + '<div class="m-hero"><div class="t">오늘의 케어 · 5분</div><div class="s">왼쪽 볼 부기 케어 추천 · 36℃ 온열</div><span class="pill">바로 시작 ▶</span></div>'
+        + '<div class="m-row"><div class="m-stat"><div class="v">92</div><div class="l">비대칭</div></div><div class="m-stat"><div class="v">88</div><div class="l">부기</div></div><div class="m-stat"><div class="v">25-32</div><div class="l">추정 나이</div></div></div>'
+        + '<div class="m-quick"><div class="m-q"><div class="ic"></div>AI 스캔</div><div class="m-q"><div class="ic"></div>케어</div><div class="m-q"><div class="ic"></div>리포트</div></div>'
+        + '</div><div class="mnav"><i class="on"></i><i></i><i></i><i></i><i></i></div></div></div>'
+        + '<div class="mock-note"><b>바뀌는 점</b> — 첫 화면에서 <b>오늘 할 케어</b>와 <b>최근 점수</b>를 바로 보여줘 행동을 유도해요. 큰 둥근 카드 + 빠른 시작 버튼.<br/><span class="tag">레이아웃</span>세로 카드형 · <span class="tag">강조</span>오늘의 케어 히어로</div></div>' },
+    scan: { title: 'AI 스캔 — 풀스크린 카메라 + 결과 바텀시트',
+      body: '<div class="mockwrap"><div class="mph"><div class="mscr"><div class="m-cam"></div>'
+        + '<div class="m-camhint">얼굴을 타원 안에 맞춰주세요</div><div class="m-oval"></div>'
+        + '<div class="m-cambadge"><span class="m-chip">정면</span><span class="m-chip">각도 보정</span><span class="m-chip">조명 보정</span></div>'
+        + '<div class="m-cbtn"></div></div></div>'
+        + '<div class="mock-note"><b>바뀌는 점</b> — 작은 박스 대신 <b>풀스크린 카메라</b>에 얼굴 가이드 타원과 보정 배지를 띄워요. 분석 결과는 <b>아래에서 올라오는 바텀시트</b>로 점수+근거를 보여줍니다.<br/><span class="tag">레이아웃</span>풀스크린 · <span class="tag">결과</span>바텀시트</div></div>' },
+    report: { title: '리포트 — 점수 링 차트 + 근거 강조',
+      body: '<div class="mockwrap"><div class="mph"><div class="mscr"><div class="mstat"></div>'
+        + '<div class="mbody"><div class="m-h">내 얼굴 리포트</div>'
+        + '<div class="m-ring"><div class="in"><div class="v">90</div><div class="l">종합 점수</div></div></div>'
+        + '<div class="m-metric"><div class="n">안면 비대칭<small>양쪽 차이 2.0%</small></div><div class="vv">92</div></div>'
+        + '<div class="m-metric"><div class="n">좌우 균형(부기)<small>좌우 폭 차이 5.9%</small></div><div class="vv">88</div></div>'
+        + '<div class="m-metric"><div class="n">다크서클<small>눈밑이 볼보다 8% 어두움</small></div><div class="vv">78</div></div>'
+        + '<div class="m-metric"><div class="n">주름<small>결이 볼의 1.6배</small></div><div class="vv">87</div></div>'
+        + '</div><div class="mnav"><i></i><i></i><i></i><i class="on"></i><i></i></div></div></div>'
+        + '<div class="mock-note"><b>바뀌는 점</b> — 종합 점수를 <b>도넛(링) 차트</b>로 한눈에, 항목마다 <b>근거값</b>을 함께 표시해 신뢰도↑.<br/><span class="tag">시각화</span>링 차트+근거 · <span class="tag">강조</span>종합 점수</div></div>' },
+    care: { title: '케어 — 풀스크린 타이머 + 부위 맵',
+      body: '<div class="mockwrap"><div class="mph"><div class="mscr"><div class="mstat"></div>'
+        + '<div class="mbody"><div class="m-h">실시간 케어</div>'
+        + '<div class="m-timer"><div class="in"><div class="v">04:32</div><div class="l">왼쪽 볼 · 64%</div></div></div>'
+        + '<div class="m-zones"><div class="m-zone"></div><div class="m-zone on"></div><div class="m-zone"></div><div class="m-zone"></div><div class="m-zone"></div></div>'
+        + '<div class="m-row"><div class="m-stat"><div class="v">36℃</div><div class="l">온열</div></div><div class="m-stat"><div class="v">중</div><div class="l">진동</div></div></div>'
+        + '</div><div class="mnav"><i></i><i></i><i class="on"></i><i></i><i></i></div></div></div>'
+        + '<div class="mock-note"><b>바뀌는 점</b> — <b>풀스크린 원형 타이머</b>로 진행률을 크게, 케어할 <b>부위 맵</b>을 하이라이트, 온도·진동을 칩으로.<br/><span class="tag">레이아웃</span>풀스크린 타이머 · <span class="tag">강조</span>부위 맵</div></div>' },
+    design: { title: '디자인 시스템 — 색·타이포·컴포넌트',
+      body: '<div class="mockwrap"><div class="mph"><div class="mscr"><div class="mstat"></div>'
+        + '<div class="mbody"><div class="m-h">디자인 시스템</div>'
+        + '<div class="m-sw"><span style="background:#fbbf24"></span><span style="background:#34d399"></span><span style="background:#161619;border:1px solid #333"></span><span style="background:#f4f4f5"></span></div>'
+        + '<div class="m-type"><div style="font-size:18px;font-weight:800">제목 Bold</div><div style="font-size:13px;color:#a1a1aa">본문 Regular</div><div style="font-size:10px;letter-spacing:1px;color:#71717a">CAPTION · 라벨</div></div>'
+        + '<div class="m-cmp"><span style="background:#fbbf24;color:#09090b;font-weight:800;border-radius:9px;padding:7px 14px;font-size:11px">버튼</span><span class="m-chip">칩</span></div>'
+        + '<div class="m-metric" style="margin-top:14px"><div class="n">카드 컴포넌트<small>둥근 모서리 + 부드러운 면</small></div><div class="vv">●</div></div>'
+        + '</div><div class="mnav"><i></i><i></i><i></i><i></i><i class="on"></i></div></div></div>'
+        + '<div class="mock-note"><b>바뀌는 점</b> — 색·글자 크기·버튼/칩/카드 <b>규칙을 통일</b>해 모든 화면이 한 앱처럼 보이게. 다크 기본 + 앰버 강조.<br/><span class="tag">기반</span>토큰화된 디자인 시스템</div></div>' }
+  };
+  function openMock(key) {
+    var m = MOCKUPS[key]; if (!m) return;
+    document.getElementById('dlgtag').textContent = '🖼️ 예상 화면 (목업)';
+    document.getElementById('dlgtitle').textContent = m.title;
+    document.getElementById('dlgbody').innerHTML = m.body;
+    document.getElementById('dlgov').classList.add('show');
+  }
 
   // 완료 항목별 '적용(배포) 날짜'. match 글이 항목에 들어가면 그 날짜를 붙입니다(위에서부터 우선).
   var DATES = [
