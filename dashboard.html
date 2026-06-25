@@ -208,6 +208,16 @@
     <a class="copy-btn" href="https://neko1015-facefit-backend.hf.space/logins" target="_blank" rel="noopener">열기 ↗</a>
   </div>
 
+  <div class="card">
+    <div class="icon">🎯</div>
+    <div class="card-body">
+      <div class="card-title">측정 재현성</div>
+      <div class="card-desc">반복 촬영 시 점수 안정성 수치화 (비대칭·부기·다크서클·주름)</div>
+      <a class="card-url" href="https://neko1015-facefit-backend.hf.space/stability" target="_blank" rel="noopener">https://neko1015-facefit-backend.hf.space/stability</a>
+    </div>
+    <a class="copy-btn" href="https://neko1015-facefit-backend.hf.space/stability" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+
   <div class="section-title">📋 개발 로드맵 (전체 할 일)</div>
   <div class="progress-bar"><div class="progress-fill"></div></div>
   <div class="progress-text">앱 핵심 기능 약 <b>95%</b> 완료 · 현재 <b>AI 엔진 보강 단계</b> 진행(1순위 정확도·일관성 1·2·3단계 완료)</div>
@@ -265,7 +275,7 @@
   </div>
   <div class="road-group">
     <h3 class="rg-todo">🥈 2순위 · 검증 체계 (LG 지표 실측)</h3>
-    <div class="road-item"><span class="ck">📋</span><span class="t">재현성 측정 <span class="sub">같은 사람 반복 촬영 시 점수 안정성 수치화</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">재현성 측정 <span class="sub">반복 촬영 시 점수 안정성 수치화 — 종합 재현성 측정·페이지(/stability) 배포. 비대칭98·부기94·다크서클99·주름82점</span></span></div>
     <div class="road-item"><span class="ck">📋</span><span class="t">검출률·정확도 평가셋 구축 <span class="sub">라벨 데이터로 정확도 실측</span></span></div>
     <div class="road-item"><span class="ck">📋</span><span class="t">부위별 처방·Zone 정확도 평가셋</span></div>
   </div>
@@ -330,7 +340,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">조명 보정 피부톤 <span class="sub">그레이월드+밝기정규화 — 조명 흔들림 밝기 std 30.8→12.1·붉은기 23.9→6.6 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">측정 재현성 수치화 + /stability 페이지 <span class="sub">반복 촬영 안정성: 비대칭98·부기94·다크서클99·주름82점 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">조명 보정 피부톤 <span class="sub">그레이월드+밝기정규화 — 조명 흔들림 밝기 std 30.8→12.1·붉은기 23.9→6.6</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">점수 각도 보정(roll) <span class="sub">얼굴 똑바로 세워 계산 — 기울임 왜곡 제거(비대칭 변동 52점→2점)</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">로그인 계정 히스토리 페이지(/logins) <span class="sub">계정·방식·동의·분석 횟수 표</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">갤러리 분석 부위 보기 추가 <span class="sub">3D 복원 + 항목별(비대칭·부기·다크서클·주름) 점·선 표시</span></span></div>
@@ -441,6 +452,10 @@
       body: '<p><b>문제</b> — 피부 밝기·붉은기를 색의 절대값으로 재다 보니, 따뜻한 조명에선 멀쩡한 피부가 "홍조"로, 어두운 곳에선 "어두운 톤"으로 잘못 잡혔어요.</p>'
         + '<p><b>어떻게</b> — ① <b>그레이월드</b>로 조명의 색 기운(따뜻/차가움)을 중화하고 ② <b>밝기 정규화</b>로 노출 차이를 줄인 뒤 피부색을 쟀습니다.</p>'
         + '<p><b>검증</b> — 같은 얼굴에 조명 15종을 입혀 측정: 흔들림이 밝기 <span class="num">std 30.8→12.1</span>, 붉은기 <span class="num">23.9→6.6</span>으로 크게 안정됐어요. (보정 후 값 스케일에 맞춰 추천·라벨 기준도 조정)</p>' },
+    repro: { match: ['재현성'], title: '측정 재현성 (반복 촬영 안정성)',
+      body: '<p><b>무엇</b> — 같은 사람이 다시 찍어도 점수가 일정한지(측정 정밀도)를 수치로 잰 거예요.</p>'
+        + '<p><b>어떻게</b> — 저장된 실제 얼굴에 \'다시 촬영\' 수준의 작은 변화(미세 회전·노출·색온도·거리·재압축) 8가지를 입혀 점수를 다시 계산하고, 그 흔들림(표준편차)을 평균냈습니다.</p>'
+        + '<p><b>결과</b> — 비대칭 <span class="num">98점</span>·부기 <span class="num">94점</span>·다크서클 <span class="num">99점</span>·주름 <span class="num">82점</span>. 비대칭·다크서클이 매우 안정적인 건 각도·조명 보정 덕분이고, 주름은 더 민감해 다음 안정화 대상입니다. (대시보드 /stability 페이지에서 실시간 확인)</p>' },
     pose: { match: ['정면 게이팅', '머리 각도(포즈)', '머리 각도 측정'], title: '머리 각도 측정 + 정면 게이팅 (정확도 1단계)',
       body: '<p><b>무엇</b> — 분석 전에 고개가 옆/위아래로 얼마나 돌아갔는지(yaw·pitch·roll) 각도를 재고, 너무 많이 돌아간 사진은 다시 촬영하도록 안내합니다.</p>'
         + '<p><b>어떻게</b> — MediaPipe가 주는 얼굴 3D 변환행렬을 분해해 각도를 계산하고, 좌우 22°·상하 25°를 넘으면 측정을 막아 <b>매번 비슷한 정면 조건</b>에서만 점수가 나오게 했어요.</p>' },
