@@ -1680,6 +1680,143 @@ def accuracy_page(refresh: int = 0):
     return html
 
 
+# ─────────────────────────────────────────────────────────────
+# 부위별 처방(Zone) 정확도 평가셋 — 얼굴 한쪽을 일부러 부풀려 '정답'을 만든 뒤,
+# 엔진이 그 부푼 쪽을 케어 부위(care_side)로 정확히 지목하는지 측정합니다. (엔진 2순위)
+# ─────────────────────────────────────────────────────────────
+_ZONE_CACHE = None
+# care_side 규칙상: 이미지 왼쪽(=사용자 오른쪽)이 넓으면 '오른쪽' 처방
+_ZONE_EXPECT = {"left": "오른쪽", "right": "왼쪽"}
+
+
+def _puff_side(image, midline_x, side, f=1.13):
+    """side='left'/'right' 쪽 절반을 f배 넓혀 한쪽이 부은 얼굴을 만듭니다(정답=그쪽)."""
+    h, w = image.shape[:2]
+    mx = max(1, min(w - 1, int(round(midline_x))))
+    left, right = image[:, :mx], image[:, mx:]
+    if side == "left":
+        return np.hstack([cv2.resize(left, (int(mx * f), h)), right])
+    return np.hstack([left, cv2.resize(right, (int((w - mx) * f), h))])
+
+
+def _run_zone_eval(sample_n=6):
+    conn = db.connect()
+    try:
+        rows = conn.execute(
+            "SELECT image_data FROM scans WHERE image_data IS NOT NULL ORDER BY id DESC LIMIT ?",
+            (sample_n,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    correct = total = 0
+    bal_sym, bal_puff = [], []
+    for row in rows:
+        if row[0] is None:
+            continue
+        raw = bytes(row[0])
+        r = _detect_and_score(raw)
+        if not r.get("detected"):
+            continue
+        bal_sym.append(r["scores"]["balance"])
+        lm = r["landmarks"]
+        img = _downscale_for_analysis(cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR))
+        h, w = img.shape[:2]
+        mids = [lm[i]["x"] for i in (10, 1, 152) if i < len(lm)]
+        if not mids:
+            continue
+        midx = (sum(mids) / len(mids)) * w
+        for side in ("left", "right"):
+            raw2 = _encode_jpg(_puff_side(img, midx, side))
+            if not raw2:
+                continue
+            rp = _detect_and_score(raw2)
+            if not rp.get("detected"):
+                continue
+            total += 1
+            if rp["scores"]["care_side"] == _ZONE_EXPECT[side]:
+                correct += 1
+            bal_puff.append(rp["scores"]["balance"])
+
+    def mean(a):
+        return round(float(np.mean(a)), 1) if a else 0.0
+
+    return {
+        "correct": correct, "total": total,
+        "acc": round(100 * correct / total) if total else 0,
+        "bal_sym": mean(bal_sym), "bal_puff": mean(bal_puff),
+    }
+
+
+# 부위별 처방(Zone) 정확도 페이지 ("/zone")
+@app.get("/zone", response_class=HTMLResponse)
+def zone_page(refresh: int = 0):
+    global _ZONE_CACHE
+    if _ZONE_CACHE is None or refresh:
+        try:
+            _ZONE_CACHE = _run_zone_eval(sample_n=6)
+        except Exception as e:
+            print("Zone 평가 실패:", e)
+            return "<h1>평가 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.</h1>"
+    d = _ZONE_CACHE
+    if d["acc"] >= 90:
+        grade, gc = "우수", "g-ok"
+    elif d["acc"] >= 75:
+        grade, gc = "양호", "g-warn"
+    else:
+        grade, gc = "개선 필요", "g-bad"
+
+    html = """<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>HeOnn FaceFit — 부위별 처방(Zone) 정확도</title>
+<style>
+  body { margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px 16px 60px; }
+  .wrap { max-width:640px; margin:0 auto; }
+  .back { display:inline-block; margin-bottom:16px; color:#fbbf24; text-decoration:none; font-size:13px; }
+  h1 { color:#fbbf24; font-size:22px; text-align:center; margin-bottom:4px; }
+  .sub { color:#a1a1aa; font-size:13px; text-align:center; line-height:1.6; margin-bottom:18px; }
+  .overall { background:linear-gradient(135deg,rgba(52,211,153,.14),rgba(52,211,153,.04)); border:1px solid rgba(52,211,153,.4); border-radius:18px; padding:22px; text-align:center; margin-bottom:14px; }
+  .overall .v { color:#34d399; font-size:44px; font-weight:800; }
+  .overall .l { color:#a1a1aa; font-size:13px; margin-top:4px; }
+  .badge { display:inline-block; font-size:12px; font-weight:700; padding:4px 12px; border-radius:999px; margin-top:8px; }
+  .g-ok { background:rgba(52,211,153,.15); color:#34d399; }
+  .g-warn { background:rgba(251,191,36,.15); color:#fbbf24; }
+  .g-bad { background:rgba(248,113,113,.15); color:#f87171; }
+  .scard { background:#18181b; border:1px solid #27272a; border-radius:14px; padding:16px; margin-bottom:12px; }
+  .sname { font-size:14px; font-weight:600; }
+  .snote { color:#71717a; font-size:12px; margin-top:6px; line-height:1.5; }
+  .resp { display:flex; align-items:center; justify-content:center; gap:12px; margin-top:8px; font-size:20px; font-weight:800; }
+  .resp .a { color:#a1a1aa; } .resp .b { color:#fbbf24; } .resp .arrow { color:#71717a; font-size:16px; }
+  .how { background:#18181b; border:1px solid #27272a; border-radius:14px; padding:16px; margin-top:6px; color:#a1a1aa; font-size:13px; line-height:1.7; }
+  .how b { color:#fbbf24; }
+  .refresh { display:inline-block; margin-top:16px; color:#a1a1aa; border:1px solid #3f3f46; border-radius:8px; padding:7px 14px; font-size:12px; text-decoration:none; }
+  .refresh:hover { color:#fbbf24; border-color:#fbbf24; }
+</style></head><body><div class="wrap">
+<a class="back" href="/dashboard">← 대시보드로</a>
+<h1>부위별 처방(Zone) 정확도</h1>
+<div class="sub">얼굴 한쪽을 일부러 부풀려(=한쪽이 부은 얼굴) '정답'을 만든 뒤,<br/>엔진이 그 <b>부푼 쪽을 케어 부위로 정확히 지목</b>하는지 측정했어요.</div>
+<div class="overall"><div class="v">__ACC__%</div><div class="l">부푼 쪽을 정확히 지목한 비율 (__COR__/__TOT__)</div>
+<div class="badge __GC__">__GRADE__</div></div>
+<div class="scard"><div class="sname">반응성 — 한쪽이 부으면 부기 점수가 떨어지나?</div>
+  <div class="resp"><span class="a">대칭 __BSYM__</span><span class="arrow">→</span><span class="b">부풀림 __BPUFF__</span></div>
+  <div class="snote">대칭 얼굴 평균 부기 __BSYM__점 → 한쪽 부풀린 얼굴 __BPUFF__점. 부으면 점수가 떨어져 케어가 필요하다고 올바르게 반응합니다.</div></div>
+<div class="how">
+  <b>어떻게 평가하나요?</b><br/>
+  실제 얼굴의 한쪽(왼쪽/오른쪽) 절반을 13% 넓혀 <b>'한쪽이 부은 얼굴'</b>을 만들면, 정답은 '그 부은 쪽을 케어'예요.
+  엔진이 매긴 케어 부위(care_side)가 부푼 쪽과 일치하면 정답으로 셉니다.<br/><br/>
+  ※ 합성 평가셋입니다. 원래부터 반대로 심하게 비대칭인 얼굴은 약하게 부풀리면 안 뒤집힐 수 있어요(드문 오답). 표본·부풀림 강도를 늘려 더 정밀화할 수 있습니다.
+</div>
+<a class="refresh" href="/zone?refresh=1">다시 평가</a>
+</div></body></html>"""
+    rep = {
+        "__ACC__": d["acc"], "__COR__": d["correct"], "__TOT__": d["total"],
+        "__GRADE__": grade, "__GC__": gc, "__BSYM__": d["bal_sym"], "__BPUFF__": d["bal_puff"],
+    }
+    for k, v in rep.items():
+        html = html.replace(k, str(v))
+    return html
+
+
 # 분석 사진 갤러리 페이지 — 저장된 분석 사진을 모아 봅니다. ("/gallery")
 @app.get("/gallery", response_class=HTMLResponse)
 def gallery():
