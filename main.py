@@ -612,6 +612,45 @@ def auth_me(authorization: str = Header(None)):
     }
 
 
+# 실시간 촬영 가이드용 가벼운 검사 주소입니다. ("/scan/guide")
+# 미리보기 프레임을 받아 '얼굴 인식·위치·정면' 여부와 짧은 한국어 안내만 빠르게 돌려줍니다.
+# (앱 카메라 화면에서 1~2초마다 호출해 사용자를 가이드)
+def _guide_check(raw):
+    image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        return {"detected": False, "ok": False, "hint": "카메라를 확인해 주세요"}
+    image = _downscale_for_analysis(image)
+    h, w = image.shape[:2]
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    result = _safe_detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+    if not result.face_landmarks:
+        return {"detected": False, "ok": False, "hint": "타원 안에 얼굴을 맞춰주세요"}
+    face = result.face_landmarks[0]
+    xs = [p.x for p in face]
+    ys = [p.y for p in face]
+    cx = (min(xs) + max(xs)) / 2          # 얼굴 중심(가로, 0~1)
+    cy = (min(ys) + max(ys)) / 2          # 얼굴 중심(세로, 0~1)
+    fw = max(xs) - min(xs)                # 얼굴 너비 비율
+    pose = _estimate_head_pose(result)
+    # 위치·크기·정면 순서로 가장 중요한 안내 하나를 고릅니다.
+    if fw < 0.42:
+        return {"detected": True, "ok": False, "hint": "조금 더 가까이 와주세요"}
+    if fw > 0.92:
+        return {"detected": True, "ok": False, "hint": "조금 더 멀리 떨어져 주세요"}
+    if abs(cx - 0.5) > 0.16 or abs(cy - 0.5) > 0.17:
+        return {"detected": True, "ok": False, "hint": "얼굴을 타원 가운데로 맞춰주세요"}
+    if pose is not None and (abs(pose["yaw"]) > MAX_YAW or abs(pose["pitch"]) > MAX_PITCH):
+        return {"detected": True, "ok": False, "hint": "정면을 바라봐 주세요"}
+    return {"detected": True, "ok": True, "hint": "좋아요! 이대로 촬영하세요"}
+
+
+@app.post("/scan/guide")
+async def scan_guide(file: UploadFile = File(...)):
+    raw = await file.read()
+    # 무거운 검출은 별도 스레드에서(이벤트 루프 비차단)
+    return await asyncio.to_thread(_guide_check, raw)
+
+
 # [실제 AI 기능 1단계] 얼굴 랜드마크 검출 주소입니다. ("/scan/landmarks")
 @app.post("/scan/landmarks")
 async def detect_landmarks(file: UploadFile = File(...)):
