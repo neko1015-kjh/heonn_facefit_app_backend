@@ -6,6 +6,8 @@ import math
 import json
 import time
 import uuid
+import asyncio
+import threading
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -190,6 +192,31 @@ _landmarker_options = vision.FaceLandmarkerOptions(
 )
 # 검출기는 서버가 켜질 때 한 번만 만들어 재사용합니다(빠른 응답을 위해).
 face_landmarker = vision.FaceLandmarker.create_from_options(_landmarker_options)
+
+# [성능·동시 접속] 검출기는 공유 인스턴스라 여러 요청이 동시에 쓰면 충돌할 수 있습니다.
+# 그래서 검출은 한 번에 하나씩만 하도록 잠금(lock)으로 보호합니다. (다른 요청은 잠깐 대기)
+_detect_lock = threading.Lock()
+
+
+def _safe_detect(mp_image):
+    """동시 접속 시에도 안전하게 얼굴을 검출합니다(공유 검출기를 한 번에 하나씩 사용)."""
+    with _detect_lock:
+        return face_landmarker.detect(mp_image)
+
+
+# [처리 속도] 폰 사진은 3000~4000px로 매우 커서 분석이 느립니다.
+# 긴 변이 기준치(1280px)를 넘으면 비율을 유지한 채 줄여서 분석합니다.
+# (점수는 대부분 비율 기반이라 영향이 작고, 해상도를 늘 같게 맞춰 오히려 일관성↑)
+ANALYZE_MAX_SIDE = 1280
+
+
+def _downscale_for_analysis(image):
+    h, w = image.shape[:2]
+    longest = max(h, w)
+    if longest <= ANALYZE_MAX_SIDE:
+        return image
+    scale = ANALYZE_MAX_SIDE / longest
+    return cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
 # 성별 추정 모델(OpenCV용 Caffe)도 준비합니다. 없으면 자동으로 내려받습니다.
 # (동일인 판별의 보조 신호로 사용 — 성별 추정은 100% 정확하지 않음에 유의)
@@ -590,10 +617,11 @@ async def detect_landmarks(file: UploadFile = File(...)):
     if image is None:
         return {"detected": False, "message": "이미지를 읽을 수 없습니다."}
 
+    image = _downscale_for_analysis(image)  # 큰 사진은 줄여서 빠르게 분석
     height, width = image.shape[:2]
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
-    result = face_landmarker.detect(mp_image)
+    result = _safe_detect(mp_image)
 
     if not result.face_landmarks:
         return {
@@ -935,10 +963,11 @@ def _detect_and_score(raw):
         # 이미지 자체를 못 읽은 경우는 '검출 대상'이 아니므로 측정에서 제외합니다.
         return {"detected": False, "message": "이미지를 읽을 수 없습니다. 올바른 사진 파일인지 확인해 주세요."}
 
+    image = _downscale_for_analysis(image)  # 큰 사진은 줄여서 빠르게 분석
     height, width = image.shape[:2]
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
-    result = face_landmarker.detect(mp_image)
+    result = _safe_detect(mp_image)
     elapsed_ms = (time.perf_counter() - t0) * 1000  # 검출까지 걸린 시간(ms)
     if not result.face_landmarks:
         # 얼굴 랜드마크를 찾지 못함 → 검출 실패로 기록
@@ -1040,7 +1069,8 @@ def _record_dict(rid, created_at, symmetry, balance, image_filename, care_side="
 @app.post("/scan/analyze")
 async def analyze_face(file: UploadFile = File(...)):
     raw = await file.read()
-    res = _detect_and_score(raw)
+    # [동시 접속] 무거운 분석은 별도 스레드에서 실행해, 그동안 다른 요청이 멈추지 않게 합니다.
+    res = await asyncio.to_thread(_detect_and_score, raw)
     if not res["detected"]:
         return res
     return {
@@ -1064,7 +1094,8 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     if not user_id:
         return {"detected": False, "message": "로그인이 필요합니다."}
     raw = await file.read()
-    res = _detect_and_score(raw)
+    # [동시 접속] 무거운 분석은 별도 스레드에서 실행(이벤트 루프를 막지 않음)
+    res = await asyncio.to_thread(_detect_and_score, raw)
     if not res["detected"]:
         return res  # 얼굴을 못 찾으면 저장하지 않음
 
@@ -1329,7 +1360,7 @@ def _perturb_image(img, deg, expo, warm, scale, dx, dy):
 def _reproducibility_metrics(img):
     """이미지 한 장의 4개 점수를 계산합니다(없으면 None)."""
     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    res = face_landmarker.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+    res = _safe_detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
     if not res.face_landmarks:
         return None
     face = res.face_landmarks[0]
@@ -1752,8 +1783,9 @@ def scan_landmarks(scan_id: int):
         image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
         if image is None:
             return {"detected": False, "message": "이미지를 읽을 수 없습니다."}
+        image = _downscale_for_analysis(image)
         rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        result = face_landmarker.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+        result = _safe_detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
         if not result.face_landmarks:
             return {"detected": False, "message": "이 사진에서 얼굴을 찾지 못했어요."}
         face = result.face_landmarks[0]
