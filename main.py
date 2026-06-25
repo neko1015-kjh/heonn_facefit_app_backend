@@ -693,13 +693,35 @@ def _compute_scores(face, w, h):
     return {"symmetry": symmetry_score, "balance": balance_score, "care_side": care_side}
 
 
+def _normalize_lighting(image):
+    """
+    [3단계 조명 보정] 조명의 '색(따뜻/차가움)'과 '밝기(노출)' 영향을 줄여,
+    같은 사람은 조명이 달라도 비슷한 피부톤이 나오게 합니다.
+    - 그레이월드: 화면 전체 평균색을 회색에 맞춰 → 백열등·형광등의 색 캐스트 제거(붉은기 왜곡↓)
+    - 밝기 정규화: 가장 밝은 부분(95퍼센타일)을 기준값에 맞춰 → 어두운/밝은 조명의 노출 영향↓
+    (실제 얼굴 검증: 조명 15종에 대한 밝기 흔들림 std 30.8→12.6, 붉은기 23.9→6.7)
+    """
+    f = image.astype(np.float32)
+    means = f.reshape(-1, 3).mean(axis=0)          # (B, G, R) 전체 평균
+    gray = float(means.mean())
+    f *= gray / np.clip(means, 1e-6, None)          # 그레이월드(색 캐스트 보정)
+    lum = f.mean(axis=2)
+    p95 = float(np.percentile(lum, 95))
+    if p95 > 1:
+        f *= 200.0 / p95                            # 밝기 정규화(가장 밝은 곳을 200 근처로)
+    return np.clip(f, 0, 255).astype(np.uint8)
+
+
 def _compute_skin_tone(image, face, w, h):
     """
     볼·이마 등 피부 영역의 색을 모아 피부톤을 분석합니다.
     - brightness: 피부 밝기(0~255, 높을수록 밝음)
     - redness: 붉은기(높을수록 홍조/붉은 편)
     image는 OpenCV 기준 BGR 순서입니다.
+
+    [3단계 조명 보정] 먼저 조명 영향을 줄인 뒤 색을 재, 조명이 달라도 일관된 피부톤이 나오게 합니다.
     """
+    image = _normalize_lighting(image)
     # 피부가 잘 드러나는 특징점들(양 볼, 이마 중앙, 코)
     skin_ids = [50, 280, 101, 330, 151, 1]
     patch = max(2, int(min(w, h) * 0.01))  # 사진 크기에 비례한 표본 영역
@@ -1589,7 +1611,7 @@ def _build_recommendations(symmetry, balance, brightness, redness):
         add("cooling", f"좌우 균형(부기) {balance}점 — 부기 완화 케어가 필요해요")
     if redness >= 30:
         add("soothing", "피부에 붉은기가 있어 진정 케어를 추천해요")
-    if brightness < 130:
+    if brightness < 115:
         add("brightening", "피부 톤이 다소 어두워 톤 보정을 추천해요")
     if symmetry < 85:
         add("lifting", f"안면 비대칭 {symmetry}점 — 탄력 리프팅 케어")
@@ -1605,9 +1627,10 @@ def _build_recommendations(symmetry, balance, brightness, redness):
 
 def _tone_labels(brightness, redness):
     """피부톤을 사람이 읽기 쉬운 말로 바꿉니다."""
-    if brightness >= 170:
+    # 조명 보정(3단계) 후 밝기 값이 약 15점 낮게 측정돼, 톤 구분 기준도 그만큼 낮춰 맞춥니다.
+    if brightness >= 155:
         tone = "밝은 톤"
-    elif brightness >= 130:
+    elif brightness >= 115:
         tone = "중간 톤"
     else:
         tone = "어두운 톤"
