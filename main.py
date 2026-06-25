@@ -1091,6 +1091,13 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
         "image_size": {"width": res["width"], "height": res["height"]},
         "landmarks": res["landmarks"],
         "age": age,
+        # 측정 품질 정보(앱에서 '정면·각도 보정·조명 보정' 배지로 표시)
+        "pose": res.get("pose"),  # 머리 각도(yaw/pitch/roll, 도)
+        "quality": {
+            "frontal": True,         # 정면 게이팅 통과(여기 도달 = 통과)
+            "angle_corrected": True, # 점수 각도 보정(2단계) 적용
+            "light_corrected": True, # 조명 보정 피부톤(3단계) 적용
+        },
         "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side, signature_json, dark_circle, wrinkle, age),
     }
 
