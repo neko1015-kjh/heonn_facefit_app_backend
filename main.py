@@ -629,25 +629,51 @@ def _distance(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
+def _inplane_roll(face, w, h):
+    """
+    [2단계 각도 보정] 얼굴이 화면에서 얼마나 '갸웃' 기울었는지(roll)를 라디안으로 구합니다.
+    얼굴 세로축(이마 10 → 턱 152)이 똑바로 서 있으면 아래로 향합니다(기울기 0).
+    이 각도만큼 점수 계산 전에 얼굴을 똑바로 세워, 기울임 때문에 생기는 가짜 비대칭을 없앱니다.
+    """
+    fx, fy = _point(face, 10, w, h)   # 이마 위 중앙
+    cx, cy = _point(face, 152, w, h)  # 턱 아래 중앙
+    return math.atan2(cx - fx, cy - fy)  # 똑바로(아래) 기준에서 벗어난 각
+
+
 def _compute_scores(face, w, h):
     """
     얼굴 특징점들로 두 가지 점수를 계산합니다. (0~100점, 높을수록 좋음)
     - 안면 비대칭 점수: 좌우 짝이 되는 점들이 얼마나 대칭인지
     - 좌우 균형(부기) 점수: 얼굴 왼쪽/오른쪽 폭이 얼마나 비슷한지
-    """
-    center_ids = [10, 168, 1, 152]
-    midline_x = sum(_point(face, i, w, h)[0] for i in center_ids) / len(center_ids)
 
-    face_width = _distance(_point(face, 234, w, h), _point(face, 454, w, h))
-    face_height = _distance(_point(face, 10, w, h), _point(face, 152, w, h))
+    [2단계 각도 보정] 고개가 기울어진(roll) 사진은 그대로 재면 좌우 비교가 틀어져
+    멀쩡한 얼굴도 비대칭으로 잡힙니다. 그래서 먼저 얼굴을 똑바로 세운 좌표(P)에서 계산합니다.
+    """
+    # 기울기만큼 반대로 회전시켜 얼굴을 똑바로 세웁니다(회전 중심: 코끝 1번).
+    # (이미지 좌표는 y축이 아래로 향하므로, 보정 회전각은 +roll 입니다.)
+    roll = _inplane_roll(face, w, h)
+    ox, oy = _point(face, 1, w, h)
+    cos_a, sin_a = math.cos(roll), math.sin(roll)
+
+    def P(idx):
+        """똑바로 세운 좌표로 변환한 특징점 위치."""
+        x, y = _point(face, idx, w, h)
+        dx, dy = x - ox, y - oy
+        return (ox + dx * cos_a - dy * sin_a, oy + dx * sin_a + dy * cos_a)
+
+    center_ids = [10, 168, 1, 152]
+    midline_x = sum(P(i)[0] for i in center_ids) / len(center_ids)
+
+    face_width = _distance(P(234), P(454))
+    face_height = _distance(P(10), P(152))
     if face_width < 1 or face_height < 1:
         return None
 
     pairs = [(33, 263), (133, 362), (61, 291), (105, 334), (129, 358), (50, 280)]
     errors = []
     for left_id, right_id in pairs:
-        lx, ly = _point(face, left_id, w, h)
-        rx, ry = _point(face, right_id, w, h)
+        lx, ly = P(left_id)
+        rx, ry = P(right_id)
         horizontal = abs((midline_x - lx) - (rx - midline_x)) / face_width
         vertical = abs(ly - ry) / face_height
         errors.append(horizontal + vertical)
@@ -655,8 +681,8 @@ def _compute_scores(face, w, h):
     symmetry_score = round(max(0.0, min(100.0, 100.0 - mean_error * 250.0)))
 
     # 좌우 끝점(234=사진 왼쪽=사용자 오른쪽, 454=사진 오른쪽=사용자 왼쪽)
-    left_width = abs(midline_x - _point(face, 234, w, h)[0])
-    right_width = abs(_point(face, 454, w, h)[0] - midline_x)
+    left_width = abs(midline_x - P(234)[0])
+    right_width = abs(P(454)[0] - midline_x)
     avg_width = (left_width + right_width) / 2
     imbalance = abs(left_width - right_width) / avg_width if avg_width > 0 else 0
     balance_score = round(max(0.0, min(100.0, 100.0 - imbalance * 150.0)))
