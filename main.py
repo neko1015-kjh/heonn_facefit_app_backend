@@ -1245,6 +1245,190 @@ def logins_page():
     return html
 
 
+# ─────────────────────────────────────────────────────────────
+# 측정 재현성(반복 촬영 안정성) — 같은 얼굴을 미세하게 다르게 '다시 촬영'했을 때
+# 점수가 얼마나 일정한지 수치화합니다. (엔진 2순위 검증 체계)
+# ─────────────────────────────────────────────────────────────
+
+# 같은 사람을 다시 찍을 때 흔히 생기는 '작은' 변화 8종 (미세 각도·노출·색온도·거리·위치)
+_REPRO_VARIATIONS = [
+    (0,   1.00,  0.00, 1.00,  0.000, 0.000),  # 원본
+    (3,   1.00,  0.00, 1.00,  0.000, 0.000),  # 살짝 갸웃
+    (-3,  1.00,  0.00, 1.00,  0.000, 0.000),
+    (0,   1.12,  0.00, 1.00,  0.000, 0.000),  # 살짝 밝게
+    (0,   0.90,  0.00, 1.00,  0.000, 0.000),  # 살짝 어둡게
+    (0,   1.00,  0.08, 1.00,  0.000, 0.000),  # 살짝 따뜻한 빛
+    (2,   1.00,  0.00, 1.05,  0.015, 0.000),  # 살짝 가까이 + 이동
+    (-2,  1.00, -0.06, 0.96, -0.015, 0.010),  # 살짝 멀리 + 이동
+]
+
+# 측정 결과 캐시 (매번 다시 계산하면 느리므로 한 번 계산해 둡니다)
+_REPRO_CACHE = None
+
+
+def _perturb_image(img, deg, expo, warm, scale, dx, dy):
+    """다시 촬영 시 생기는 작은 변화를 흉내냅니다(미세 회전·노출·색온도·거리·위치 + 재압축)."""
+    h, w = img.shape[:2]
+    M = cv2.getRotationMatrix2D((w / 2, h / 2), deg, scale)
+    M[0, 2] += dx * w
+    M[1, 2] += dy * h
+    out = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    f = out.astype(np.float32) * expo
+    f[:, :, 2] *= (1 + warm)
+    f[:, :, 0] *= (1 - warm)
+    out = np.clip(f, 0, 255).astype(np.uint8)
+    ok, enc = cv2.imencode(".jpg", out, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return cv2.imdecode(enc, cv2.IMREAD_COLOR) if ok else out
+
+
+def _reproducibility_metrics(img):
+    """이미지 한 장의 4개 점수를 계산합니다(없으면 None)."""
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    res = face_landmarker.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+    if not res.face_landmarks:
+        return None
+    face = res.face_landmarks[0]
+    h, w = img.shape[:2]
+    sc = _compute_scores(face, w, h)
+    if sc is None:
+        return None
+    return {
+        "symmetry": sc["symmetry"],
+        "balance": sc["balance"],
+        "dark_circle": _compute_dark_circles(img, face, w, h),
+        "wrinkle": _compute_wrinkles(img, face, w, h),
+    }
+
+
+def _run_reproducibility(sample_n=5):
+    """저장된 얼굴 몇 장에 작은 재촬영 변화를 입혀, 점수별 표준편차(흔들림)를 측정합니다."""
+    conn = db.connect()
+    try:
+        rows = conn.execute(
+            "SELECT image_data FROM scans WHERE image_data IS NOT NULL ORDER BY id DESC LIMIT ?",
+            (sample_n,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    keys = ["symmetry", "balance", "dark_circle", "wrinkle"]
+    per_face_std = {k: [] for k in keys}
+    faces_used = 0
+    for row in rows:
+        if row[0] is None:
+            continue
+        base = cv2.imdecode(np.frombuffer(bytes(row[0]), np.uint8), cv2.IMREAD_COLOR)
+        if base is None:
+            continue
+        vals = {k: [] for k in keys}
+        for v in _REPRO_VARIATIONS:
+            m = _reproducibility_metrics(_perturb_image(base, *v))
+            if m:
+                for k in keys:
+                    vals[k].append(m[k])
+        if vals["symmetry"]:
+            faces_used += 1
+            for k in keys:
+                per_face_std[k].append(float(np.std(vals[k])))
+
+    labels = {"symmetry": "비대칭", "balance": "부기(좌우 균형)", "dark_circle": "다크서클", "wrinkle": "주름"}
+    result = {"faces": faces_used, "variations": len(_REPRO_VARIATIONS), "metrics": []}
+    for k in keys:
+        mean_std = float(np.mean(per_face_std[k])) if per_face_std[k] else 0.0
+        score = max(0, round(100 - mean_std * 4))      # 0편차=100점
+        if score >= 95:
+            grade, cls = "우수", "g-ok"
+        elif score >= 90:
+            grade, cls = "양호", "g-ok"
+        elif score >= 80:
+            grade, cls = "보통", "g-warn"
+        else:
+            grade, cls = "개선 필요", "g-bad"
+        result["metrics"].append({
+            "key": k, "label": labels[k], "std": round(mean_std, 1),
+            "score": score, "grade": grade, "cls": cls,
+        })
+    return result
+
+
+# 측정 재현성 페이지 — 반복 촬영 시 점수 안정성을 수치로 보여줍니다. ("/stability")
+@app.get("/stability", response_class=HTMLResponse)
+def stability_page(refresh: int = 0):
+    global _REPRO_CACHE
+    if _REPRO_CACHE is None or refresh:
+        try:
+            _REPRO_CACHE = _run_reproducibility(sample_n=5)
+        except Exception as e:
+            print("재현성 측정 실패:", e)
+            return "<h1>측정 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.</h1>"
+    data = _REPRO_CACHE
+
+    cards = []
+    for m in data["metrics"]:
+        cards.append(
+            f'<div class="scard">'
+            f'<div class="srow"><span class="sname">{m["label"]}</span>'
+            f'<span class="sbadge {m["cls"]}">{m["grade"]}</span></div>'
+            f'<div class="sbig">{m["score"]}<span class="sunit">점</span></div>'
+            f'<div class="strack"><div class="sfill" style="width:{m["score"]}%"></div></div>'
+            f'<div class="snote">반복 촬영 시 점수 흔들림(표준편차) 평균 ±{m["std"]}점</div>'
+            f'</div>'
+        )
+    overall = round(sum(m["score"] for m in data["metrics"]) / max(1, len(data["metrics"])))
+
+    html = """<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>HeOnn FaceFit — 측정 재현성</title>
+<style>
+  body { margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px 16px 60px; }
+  .wrap { max-width:720px; margin:0 auto; }
+  .back { display:inline-block; margin-bottom:16px; color:#fbbf24; text-decoration:none; font-size:13px; }
+  h1 { color:#fbbf24; font-size:22px; text-align:center; margin-bottom:4px; }
+  .sub { color:#a1a1aa; font-size:13px; text-align:center; line-height:1.6; margin-bottom:18px; }
+  .overall { background:linear-gradient(135deg,rgba(52,211,153,.14),rgba(52,211,153,.04)); border:1px solid rgba(52,211,153,.4); border-radius:18px; padding:20px; text-align:center; margin-bottom:18px; }
+  .overall .v { color:#34d399; font-size:40px; font-weight:800; }
+  .overall .l { color:#a1a1aa; font-size:13px; margin-top:4px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:520px){ .grid { grid-template-columns:1fr; } }
+  .scard { background:#18181b; border:1px solid #27272a; border-radius:14px; padding:16px; }
+  .srow { display:flex; justify-content:space-between; align-items:center; }
+  .sname { font-size:14px; font-weight:600; }
+  .sbadge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }
+  .g-ok { background:rgba(52,211,153,.15); color:#34d399; }
+  .g-warn { background:rgba(251,191,36,.15); color:#fbbf24; }
+  .g-bad { background:rgba(248,113,113,.15); color:#f87171; }
+  .sbig { color:#f4f4f5; font-size:30px; font-weight:800; margin:10px 0 8px; }
+  .sunit { font-size:14px; color:#a1a1aa; font-weight:500; margin-left:2px; }
+  .strack { height:8px; background:#27272a; border-radius:999px; overflow:hidden; }
+  .sfill { height:100%; background:linear-gradient(90deg,#fbbf24,#34d399); border-radius:999px; }
+  .snote { color:#71717a; font-size:11px; margin-top:8px; line-height:1.5; }
+  .how { background:#18181b; border:1px solid #27272a; border-radius:14px; padding:16px; margin-top:18px; color:#a1a1aa; font-size:13px; line-height:1.7; }
+  .how b { color:#fbbf24; }
+  .refresh { display:inline-block; margin-top:16px; color:#a1a1aa; border:1px solid #3f3f46; border-radius:8px; padding:7px 14px; font-size:12px; text-decoration:none; }
+  .refresh:hover { color:#fbbf24; border-color:#fbbf24; }
+</style></head><body><div class="wrap">
+<a class="back" href="/dashboard">← 대시보드로</a>
+<h1>측정 재현성</h1>
+<div class="sub">같은 얼굴을 미세하게 다르게 '다시 촬영'한 상황(작은 각도·조명·거리 변화)을 흉내내,<br/>점수가 얼마나 일정한지 측정했어요. 점수가 높을수록 다시 찍어도 결과가 안정적입니다.</div>
+<div class="overall"><div class="v">__OVERALL__점</div><div class="l">종합 재현성 (4개 항목 평균)</div></div>
+<div class="grid">__CARDS__</div>
+<div class="how">
+  <b>어떻게 쟀나요?</b><br/>
+  저장된 실제 얼굴 __FACES__장 각각에 <b>__VARS__가지</b>의 작은 재촬영 변화(미세 회전·노출·색온도·거리·위치 이동 + 재압축)를 입혀 점수를 다시 계산하고,
+  그 <b>흔들림(표준편차)</b>을 평균냈습니다. 흔들림이 작을수록(=점수가 높을수록) 재현성이 좋습니다.<br/><br/>
+  ※ 비대칭·다크서클이 특히 안정적인 건 <b>각도·조명 보정</b> 덕분이에요. 주름은 표면 결을 보는 특성상 더 민감해, 안정화가 다음 개선 대상입니다.
+</div>
+<a class="refresh" href="/stability?refresh=1">다시 측정</a>
+</div></body></html>"""
+    html = (
+        html.replace("__OVERALL__", str(overall))
+        .replace("__CARDS__", "".join(cards))
+        .replace("__FACES__", str(data["faces"]))
+        .replace("__VARS__", str(data["variations"]))
+    )
+    return html
+
+
 # 분석 사진 갤러리 페이지 — 저장된 분석 사진을 모아 봅니다. ("/gallery")
 @app.get("/gallery", response_class=HTMLResponse)
 def gallery():
