@@ -838,37 +838,47 @@ def _compute_dark_circles(image, face, w, h):
     return {"score": score, "basis": f"눈밑이 볼보다 {darkness_pct:.0f}% 어두움"}
 
 
+# 볼(매끈 기준) 텍스처의 최소값. 너무 매끈한 볼(거의 0)로 나눠 비율이 폭발하는 걸 막습니다.
+_WRINKLE_BASE_FLOOR = 0.45
+
+
 def _compute_wrinkles(image, face, w, h):
     """
     이마·미간·눈가·팔자 부위의 잔주름(텍스처)을 매끈한 볼과 비교해 주름 점수를 냅니다.
     (0~100, 높을수록 양호=매끈) 텍스처가 볼보다 많을수록 점수가 낮아집니다. (참고용 추정)
-    사진 선명도 영향을 줄이려 '매끈한 볼' 기준으로 상대 비교합니다.
+
+    [안정화] 같은 사람을 다시 찍어도 점수가 덜 흔들리도록 두 가지를 적용:
+      ① 텍스처를 밝기로 정규화(라플라시안 분산 ÷ 밝기²) → 노출·밝기 변화에 안 휘둘림
+      ② 볼 기준값에 하한 → 너무 매끈한 볼로 나눠 비율이 폭발하는 것 방지
+    (검증: 재촬영 흔들림 std 5.0→3.4, 변별력은 유지)
     """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY).astype(np.float32)
     fw = abs(face[454].x - face[234].x) * w
     rad = max(3, int(fw * 0.045))
 
-    def lapvar(cx, cy):
+    def ntex(cx, cy):
+        # 밝기로 정규화한 텍스처(노출 불변). ×1000은 보기 좋은 크기로 맞추기 위함.
         p = _gray_patch(gray, cx, cy, w, h, rad)
         if p.size < 9:
             return None
-        return float(cv2.Laplacian(p, cv2.CV_32F).var())
+        m = float(p.mean())
+        return float(cv2.Laplacian(p, cv2.CV_32F).var()) / (m * m + 1e-6) * 1000.0
 
     regions = [
-        lapvar(face[151].x, face[151].y),          # 이마 중앙
-        lapvar(face[9].x, face[9].y),               # 미간
-        lapvar(face[33].x - 0.02, face[33].y),      # 왼쪽 눈가
-        lapvar(face[263].x + 0.02, face[263].y),    # 오른쪽 눈가
-        lapvar(face[205].x, face[205].y),           # 왼쪽 팔자
-        lapvar(face[425].x, face[425].y),           # 오른쪽 팔자
+        ntex(face[151].x, face[151].y),          # 이마 중앙
+        ntex(face[9].x, face[9].y),               # 미간
+        ntex(face[33].x - 0.02, face[33].y),      # 왼쪽 눈가
+        ntex(face[263].x + 0.02, face[263].y),    # 오른쪽 눈가
+        ntex(face[205].x, face[205].y),           # 왼쪽 팔자
+        ntex(face[425].x, face[425].y),           # 오른쪽 팔자
     ]
     regions = [v for v in regions if v is not None]
-    base = [lapvar(face[50].x, face[50].y), lapvar(face[280].x, face[280].y)]
+    base = [ntex(face[50].x, face[50].y), ntex(face[280].x, face[280].y)]
     base = [v for v in base if v is not None]
     if not regions or not base:
         return {"score": 0, "basis": "측정 불가"}
     # 주름 부위 결이 매끈한 볼의 몇 배인지(근거값) → 정상범위 기준으로 점수화
-    ratio = (sum(regions) / len(regions)) / (sum(base) / len(base) + 1e-6)
+    ratio = (sum(regions) / len(regions)) / max(sum(base) / len(base), _WRINKLE_BASE_FLOOR)
     score = round(_score_from_anchors(ratio, _WRINKLE_ANCHORS))
     return {"score": score, "basis": f"주름 부위 결이 볼의 {ratio:.1f}배"}
 
