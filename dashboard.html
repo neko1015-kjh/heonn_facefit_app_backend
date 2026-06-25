@@ -285,7 +285,7 @@
     <div class="road-item"><span class="ck">📋</span><span class="t">표정·눈 비대칭 측정 (블렌드셰이프 52종)</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">주름·다크서클·나이 추정 <span class="sub">나이(Caffe 모델)·다크서클·주름 점수 — 배포 완료, 앱·갤러리 반영</span></span></div>
     <div class="road-item"><span class="ck">📋</span><span class="t">동일인 판별 정확도 향상 (정식 얼굴 임베딩)</span></div>
-    <div class="road-item"><span class="ck">📋</span><span class="t">콜드스타트 제거(서버 항상 켜기)·처리 속도·동시 접속</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">처리 속도·동시 접속 + 콜드스타트 완화 <span class="sub">큰 사진 다운스케일(분석 231→131ms) · 검출 잠금+스레드 오프로드(동시 요청 시 안 멈춤) · keep-alive 핑 준비 / ※ 100% 상시가동은 유료 서버 필요</span></span></div>
   </div>
 
   <div class="section-title">🛡️ 예외 처리·안정성 보강 <span class="section-note">(점검 완료 · 2026-06-22)</span></div>
@@ -341,7 +341,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">점수식 근거화 <span class="sub">측정값(%·배)+정상범위 기준점으로 점수 재설계 + 근거값 표시 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">성능·동시 접속 <span class="sub">사진 다운스케일(231→131ms)·검출 잠금·분석 스레드 오프로드 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">점수식 근거화 <span class="sub">측정값(%·배)+정상범위 기준점으로 점수 재설계 + 근거값 표시</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">측정 재현성 수치화 + /stability 페이지 <span class="sub">반복 촬영 안정성: 비대칭98·부기94·다크서클99·주름82점</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">조명 보정 피부톤 <span class="sub">그레이월드+밝기정규화 — 조명 흔들림 밝기 std 30.8→12.1·붉은기 23.9→6.6</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">점수 각도 보정(roll) <span class="sub">얼굴 똑바로 세워 계산 — 기울임 왜곡 제거(비대칭 변동 52점→2점)</span></span></div>
@@ -454,6 +455,10 @@
       body: '<p><b>문제</b> — 피부 밝기·붉은기를 색의 절대값으로 재다 보니, 따뜻한 조명에선 멀쩡한 피부가 "홍조"로, 어두운 곳에선 "어두운 톤"으로 잘못 잡혔어요.</p>'
         + '<p><b>어떻게</b> — ① <b>그레이월드</b>로 조명의 색 기운(따뜻/차가움)을 중화하고 ② <b>밝기 정규화</b>로 노출 차이를 줄인 뒤 피부색을 쟀습니다.</p>'
         + '<p><b>검증</b> — 같은 얼굴에 조명 15종을 입혀 측정: 흔들림이 밝기 <span class="num">std 30.8→12.1</span>, 붉은기 <span class="num">23.9→6.6</span>으로 크게 안정됐어요. (보정 후 값 스케일에 맞춰 추천·라벨 기준도 조정)</p>' },
+    perf: { match: ['처리 속도·동시 접속', '성능·동시 접속'], title: '처리 속도 · 동시 접속 · 콜드스타트',
+      body: '<p><b>처리 속도</b> — 폰 사진은 3000~4000px로 커서 분석이 느렸어요. 긴 변 1280px로 줄여 분석하니 <span class="num">231ms → 131ms (약 43%↑)</span>. 점수는 거의 그대로(비율 기반)이고, 늘 같은 해상도로 맞춰 일관성도 좋아졌어요.</p>'
+        + '<p><b>동시 접속</b> — ① 공유 얼굴검출기를 한 번에 하나씩 쓰도록 잠금(lock)으로 보호(동시 요청 충돌 방지) ② 무거운 분석을 <b>별도 스레드</b>로 돌려, 한 사람 분석 중에도 다른 요청(다른 사용자·상태확인)이 멈추지 않게 했어요.</p>'
+        + '<p><b>콜드스타트</b> — 10분마다 서버를 깨우는 keep-alive 핑을 준비했어요. <b>※ 100% 항상 켜기는 유료(상시가동) 서버가 필요</b>합니다.</p>' },
     ground: { match: ['점수식 근거화'], title: '점수식 근거화',
       body: '<p><b>문제</b> — 점수가 \'100 − 오차 × 250\' 같은 <b>임의의 상수</b>로 만들어져, 왜 그 점수인지 근거가 약했어요.</p>'
         + '<p><b>어떻게</b> — 먼저 <b>의미 있는 측정값</b>으로 바꿨어요: 비대칭=양쪽 차이 평균(%), 부기=좌우 얼굴 폭 차이(%), 다크서클=눈밑이 볼보다 어두운 정도(%), 주름=결이 볼의 몇 배(배). 그리고 \'이 값이면 몇 점\'이라는 <b>정상범위 기준점</b>에 맞춰 0~100점으로 환산합니다.</p>'
@@ -525,6 +530,7 @@
 
   // 완료 항목별 '적용(배포) 날짜'. match 글이 항목에 들어가면 그 날짜를 붙입니다(위에서부터 우선).
   var DATES = [
+    { d: '2026-06-25', m: ['처리 속도·동시 접속', '성능·동시 접속'] },
     { d: '2026-06-25', m: ['점수식 근거화'] },
     { d: '2026-06-25', m: ['재현성'] },
     { d: '2026-06-25', m: ['조명 보정'] },
