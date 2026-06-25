@@ -106,7 +106,7 @@
   <header>
     <div class="logo">HeOnn FaceFit</div>
     <div class="sub">서비스 대시보드 · 상태 · 로드맵</div>
-    <div class="updated">마지막 점검: <span id="checked">2026-06-21 (백엔드·DB·웹·갤러리·대시보드 전부 정상)</span></div>
+    <div class="updated">마지막 점검: <span id="checked">2026-06-25 (백엔드·DB·웹·갤러리·대시보드 전부 정상 · v11 진짜 카카오 로그인 배포)</span></div>
   </header>
 
   <div class="section-title">🖥️ 서버 상태 <span class="section-note">(마지막 점검 기준)</span></div>
@@ -217,6 +217,7 @@
     <div class="road-item done"><span class="ck">✅</span><span class="t">괄사 이미지 + 디바이스 동기화 로딩</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">얼굴 특징 + 성별 기반 동일인 판별</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">서비스 대시보드 페이지 (상태·로그·계정·갤러리)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">로그인 계정 히스토리 페이지 (/logins) <span class="sub">로그인 방식·이름·동의 상태·분석 횟수 표</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">웹 호스팅 안정화 (Hugging Face Static 이전)</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">GitHub 저장소 새 계정(neko1015-kjh)으로 이전</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">실제 카카오 로그인 (OAuth) <span class="sub">같은 카카오 계정 = 동일 사용자 연결</span></span></div>
@@ -225,7 +226,7 @@
     <div class="road-item done"><span class="ck">✅</span><span class="t">사진 업로드 방식 최신화 <span class="sub">최신 RN 호환(Expo uploadAsync) — APK 분석 실패 해결</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">분석 결과 화면 얼굴 영역만 표시 (개인정보 보호)</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">앱 아이콘 헤은 로고 적용</span></div>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">갤러리 사진 클릭 → 3D 복원 팝업 (얼굴 점구름 회전)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">갤러리 사진 → 3D 복원 보기 · 분석 부위 보기 <span class="sub">앱과 동일한 비대칭·부기·다크서클·주름 점·선 표시</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">머리 각도(포즈) 측정 + 정면 게이팅 (측정 일관성↑)</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">주름·다크서클·나이 추정 + 앱 결과·갤러리 표시</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">예외 처리·안정성 점검 (백엔드 보강 항목 도출)</span></div>
@@ -313,6 +314,9 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">로그인 계정 히스토리 페이지(/logins) <span class="sub">계정·방식·동의·분석 횟수 표 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">갤러리 분석 부위 보기 추가 <span class="sub">3D 복원 + 항목별(비대칭·부기·다크서클·주름) 점·선 표시</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">진짜 카카오 로그인(앱 네이티브) 콜백 분기 <span class="sub">앱은 facefit:// 로 토큰 복귀</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">머리 각도 측정 + 정면 게이팅 (측정 일관성)</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">주름·다크서클·나이 추정 (분석 항목 확장)</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">갤러리 사진 클릭 → 3D 복원 팝업</span></div>
