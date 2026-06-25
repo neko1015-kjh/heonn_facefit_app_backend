@@ -97,6 +97,21 @@
   .road-item.done { color: var(--muted); }
   .road-item.done .t { text-decoration: line-through; text-decoration-color: var(--faint); }
   .road-item .sub { display: block; color: var(--faint); font-size: 12px; margin-top: 2px; text-decoration: none; }
+  /* 완료 항목 클릭 → 개발 내용 팝업 */
+  .road-item.has-detail { cursor: pointer; transition: border-color .15s, background .15s; }
+  .road-item.has-detail:hover { border-color: var(--amber); background: #1f1f23; }
+  .dhint { display: block; margin-top: 6px; color: var(--amber); font-size: 11px; font-weight: 700; text-decoration: none; }
+  .dlg-ov { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
+  .dlg-ov.show { display: flex; }
+  .dlg { background: var(--surface); border: 1px solid var(--border2); border-radius: 16px; max-width: 520px; width: 100%; max-height: 82vh; overflow-y: auto; padding: 22px; }
+  .dlg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .dlg-title { color: var(--amber); font-size: 18px; font-weight: 800; line-height: 1.35; }
+  .dlg-close { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; line-height: 1; }
+  .dlg-tag { display: inline-block; font-size: 11px; font-weight: 700; color: var(--emerald); background: rgba(52,211,153,.15); border-radius: 999px; padding: 3px 10px; margin: 10px 0 14px; }
+  .dlg-body { color: var(--text); font-size: 14px; line-height: 1.75; }
+  .dlg-body p { margin-bottom: 11px; }
+  .dlg-body b { color: var(--amber); }
+  .dlg-body .num { color: var(--emerald); font-weight: 700; }
 
   footer { text-align: center; color: var(--faint); font-size: 12px; margin-top: 36px; line-height: 1.7; }
 </style>
@@ -407,6 +422,98 @@
   </footer>
 </div>
 
+<!-- 완료 항목 개발 내용 팝업 -->
+<div id="dlgov" class="dlg-ov" onclick="closeDlg()">
+  <div class="dlg" onclick="event.stopPropagation()">
+    <div class="dlg-head"><div class="dlg-title" id="dlgtitle"></div><button class="dlg-close" onclick="closeDlg()">✕</button></div>
+    <span class="dlg-tag">✅ 완료 · 개발 내용</span>
+    <div class="dlg-body" id="dlgbody"></div>
+  </div>
+</div>
+<script>
+  // 완료 항목별 "어떻게 개발했는지" 설명. match: 항목 글에 이 말이 들어가면 이 설명을 띄웁니다.
+  var DETAILS = {
+    angle: { match: ['각도 보정', '점수 각도 보정'], title: '점수 각도 보정 (정확도 2단계)',
+      body: '<p><b>문제</b> — 고개를 살짝 기울여(갸웃) 찍으면 똑같은 얼굴인데도 좌우 비교가 틀어져 비대칭 점수가 크게 떨어졌어요.</p>'
+        + '<p><b>어떻게</b> — 점수를 계산하기 전에 얼굴의 세로축(이마→턱)을 기준으로 <b>얼굴을 똑바로 세운 좌표</b>로 회전시켜, 기울임 때문에 생기는 가짜 비대칭을 제거했습니다.</p>'
+        + '<p><b>검증</b> — 실제 얼굴 5장을 ±15°까지 기울여 측정: 보정 전엔 비대칭이 96→44점으로 폭락했지만, 보정 후엔 <span class="num">어느 각도든 ~95점</span>으로 일정(변동 52점→2점)해졌어요.</p>' },
+    light: { match: ['조명 보정'], title: '조명 보정 피부톤 (정확도 3단계)',
+      body: '<p><b>문제</b> — 피부 밝기·붉은기를 색의 절대값으로 재다 보니, 따뜻한 조명에선 멀쩡한 피부가 "홍조"로, 어두운 곳에선 "어두운 톤"으로 잘못 잡혔어요.</p>'
+        + '<p><b>어떻게</b> — ① <b>그레이월드</b>로 조명의 색 기운(따뜻/차가움)을 중화하고 ② <b>밝기 정규화</b>로 노출 차이를 줄인 뒤 피부색을 쟀습니다.</p>'
+        + '<p><b>검증</b> — 같은 얼굴에 조명 15종을 입혀 측정: 흔들림이 밝기 <span class="num">std 30.8→12.1</span>, 붉은기 <span class="num">23.9→6.6</span>으로 크게 안정됐어요. (보정 후 값 스케일에 맞춰 추천·라벨 기준도 조정)</p>' },
+    pose: { match: ['정면 게이팅', '머리 각도(포즈)', '머리 각도 측정'], title: '머리 각도 측정 + 정면 게이팅 (정확도 1단계)',
+      body: '<p><b>무엇</b> — 분석 전에 고개가 옆/위아래로 얼마나 돌아갔는지(yaw·pitch·roll) 각도를 재고, 너무 많이 돌아간 사진은 다시 촬영하도록 안내합니다.</p>'
+        + '<p><b>어떻게</b> — MediaPipe가 주는 얼굴 3D 변환행렬을 분해해 각도를 계산하고, 좌우 22°·상하 25°를 넘으면 측정을 막아 <b>매번 비슷한 정면 조건</b>에서만 점수가 나오게 했어요.</p>' },
+    wrinkleage: { match: ['주름·다크서클·나이', '주름 ·'], title: '주름·다크서클·나이 추정',
+      body: '<p><b>다크서클</b> — 눈 밑과 볼의 밝기를 비교해 눈밑이 어두울수록 점수를 낮춰요.</p>'
+        + '<p><b>주름</b> — 이마·미간·눈가·팔자 부위의 결(텍스처)을 매끈한 볼과 비교해 결이 많을수록 점수를 낮춰요.</p>'
+        + '<p><b>나이</b> — 얼굴을 잘라 나이 추정 AI 모델(Caffe)로 나이대를 추정합니다(참고용). 모두 앱 결과·갤러리에 표시돼요.</p>' },
+    gallery: { match: ['분석 부위 보기', '3D 복원'], title: '갤러리 3D 복원 · 분석 부위 보기',
+      body: '<p><b>3D 복원</b> — 저장된 사진에서 얼굴 특징점 478개를 다시 뽑아, 화면에서 자동 회전하는 점구름으로 입체 표현합니다.</p>'
+        + '<p><b>분석 부위 보기</b> — 앱 리포트와 <b>똑같은 방식</b>으로 얼굴 사진 위에 비대칭·부기·다크서클·주름 부위를 점·선·중앙선으로 그려 보여줘요(항목 탭으로 전환).</p>' },
+    loginhist: { match: ['로그인 계정 히스토리'], title: '로그인 계정 히스토리 페이지',
+      body: '<p><b>무엇</b> — 앱·웹에서 로그인한 계정을 표로 모아 봅니다: 로그인 방식(카카오/구글/네이버/게스트)·이름·동의 상태·분석 횟수.</p>'
+        + '<p><b>어떻게</b> — 사용자 DB를 읽어 /logins 페이지로 보여주고, 계정 고유번호는 개인정보 보호를 위해 일부만 표시해요.</p>' },
+    kakao: { match: ['카카오 로그인'], title: '진짜 카카오 로그인 (OAuth)',
+      body: '<p><b>무엇</b> — 임시 게스트가 아니라 <b>실제 카카오 계정</b>으로 로그인합니다. 같은 카카오면 다음에도 같은 계정으로 이어져요.</p>'
+        + '<p><b>어떻게</b> — 앱에서 인앱 브라우저로 카카오 인증창을 열고, 인증이 끝나면 백엔드가 앱 전용 주소(facefit://)로 로그인 토큰을 돌려줘 자동 복귀합니다. 로그인에도 콜드스타트 재시도를 넣어 "연결 실패" 알림을 막았어요.</p>' },
+    quality: { match: ['측정 보정 표시', '측정 신뢰도', '보정 배지'], title: '앱 측정 보정 표시',
+      body: '<p><b>무엇</b> — 각도·조명 보정이 적용됐다는 걸 앱에서 눈으로 확인하게 했어요.</p>'
+        + '<p><b>스캔 결과</b> — 분석 직후 \'정면·각도 보정·조명 보정\' 배지와 측정된 머리 각도를 표시.</p>'
+        + '<p><b>리포트</b> — \'측정 신뢰도\' 카드로 세 보정이 매 분석에 어떻게 적용되는지 설명해요.</p>' },
+    upload: { match: ['업로드 방식'], title: '사진 업로드 방식 최신화',
+      body: '<p><b>문제</b> — 최신 React Native에서 기존 업로드 방식이 막혀 APK에서 "분석 실패"가 났어요.</p>'
+        + '<p><b>어떻게</b> — Expo 공식 파일 업로드(멀티파트) 방식으로 바꿔 휴대폰에서 사진이 안정적으로 서버에 올라가도록 근본 해결했습니다.</p>' },
+    coldstart: { match: ['콜드스타트'], title: '콜드스타트 대응',
+      body: '<p><b>문제</b> — 무료 서버는 잠시 안 쓰면 잠들어, 첫 요청이 실패하곤 했어요.</p>'
+        + '<p><b>어떻게</b> — 분석·로그인 시 <b>서버 깨우기 대기 + 자동 재시도</b>를 넣어, 서버가 깨어나는 동안 사용자에게는 문제없이 동작하게 했습니다.</p>' },
+    facecrop: { match: ['얼굴 영역만'], title: '분석 결과 얼굴 영역만 표시',
+      body: '<p><b>무엇</b> — 분석 후 원본 사진 전체 대신 <b>얼굴 부분만</b> 잘라 확대해 보여줘요(개인정보 보호 + 보기 편함).</p>'
+        + '<p><b>어떻게</b> — 검출된 특징점들의 경계로 얼굴 영역을 구해 여유를 두고 잘라 표시합니다.</p>' },
+    postgres: { match: ['PostgreSQL'], title: 'PostgreSQL(Neon) 전환 + 클라우드 배포',
+      body: '<p><b>무엇</b> — 데이터가 서버 재시작에도 사라지지 않도록 정식 데이터베이스(Neon PostgreSQL)로 옮기고, 백엔드를 클라우드(Hugging Face)에 배포했어요.</p>'
+        + '<p><b>효과</b> — 로그인·분석 기록·사진·지표가 영구 보존되고, 회사 PC·폰 어디서나 같은 데이터로 접속됩니다.</p>' },
+    dashboard: { match: ['대시보드 페이지', '서비스 대시보드'], title: '서비스 대시보드 페이지',
+      body: '<p><b>무엇</b> — 지금 보고 계신 이 페이지예요. 서버 상태·접속 주소·개발 로드맵·배포 내역·운영 계정을 한곳에 모았습니다.</p>'
+        + '<p><b>어떻게</b> — 공개 주소(/dashboard)와 claude.ai 아티팩트 <b>두 곳</b>에서 같은 내용으로 유지하며, 작업이 끝날 때마다 갱신해요.</p>' },
+    sameperson: { match: ['동일인 판별'], title: '동일인 판별',
+      body: '<p><b>무엇</b> — 이전과 다른 사람 사진으로 비교되지 않도록, 같은 사람인지 확인합니다.</p>'
+        + '<p><b>어떻게</b> — 얼굴 특징점으로 만든 \'얼굴 서명\'과 성별 추정을 비교해, 너무 다르면 본인 사진으로 다시 찍도록 안내해요.</p>' },
+    landmark: { match: ['478'], title: 'MediaPipe 얼굴 랜드마크 478점',
+      body: '<p><b>무엇</b> — 모든 분석의 토대. 얼굴에서 478개의 특징점을 찾아 위치를 잡습니다.</p>'
+        + '<p><b>어떻게</b> — 구글 MediaPipe FaceLandmarker로 눈·코·입·윤곽 등 478점을 검출하고, 이 좌표로 비대칭·부기·다크서클·주름·3D 등을 계산해요.</p>' },
+    reco: { match: ['제품 추천'], title: '맞춤 제품 추천',
+      body: '<p><b>무엇</b> — 분석 결과(부기·피부톤·비대칭)에 맞춰 케어 제품을 추천합니다.</p>'
+        + '<p><b>어떻게</b> — 부기·붉은기·밝기·비대칭 점수를 기준으로 알맞은 제품을 앞쪽에 배치해 최대 5개까지 골라 보여줘요.</p>' }
+  };
+
+  function findDetailKey(t) {
+    for (var k in DETAILS) {
+      var m = DETAILS[k].match;
+      for (var i = 0; i < m.length; i++) { if (t.indexOf(m[i]) >= 0) return k; }
+    }
+    return null;
+  }
+  function openDlg(key) {
+    var d = DETAILS[key]; if (!d) return;
+    document.getElementById('dlgtitle').textContent = d.title;
+    document.getElementById('dlgbody').innerHTML = d.body;
+    document.getElementById('dlgov').classList.add('show');
+  }
+  function closeDlg() { document.getElementById('dlgov').classList.remove('show'); }
+
+  // 완료 항목 중 설명이 있는 것만 클릭 가능하게 만들고, '개발 내용 보기 ▸' 안내를 붙입니다.
+  document.querySelectorAll('.road-item.done').forEach(function (el) {
+    var key = findDetailKey(el.textContent);
+    if (!key) return;
+    el.classList.add('has-detail');
+    var hint = document.createElement('span');
+    hint.className = 'dhint';
+    hint.textContent = '개발 내용 보기 ▸';
+    (el.querySelector('.t') || el).appendChild(hint);
+    el.addEventListener('click', function () { openDlg(key); });
+  });
+</script>
 <script>
   document.querySelectorAll('.copy-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
