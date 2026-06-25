@@ -629,6 +629,30 @@ def _distance(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
+# ── 점수식 근거화: 측정값(단위 있음) → 정상범위 기준점으로 0~100점 환산 ──
+# anchors: [(측정값, 점수), ...] 측정값 오름차순. 기준점 사이는 직선으로 이어 점수를 매깁니다.
+# (임의 상수 대신, "이 값이면 몇 점"이라는 의미 있는 기준으로 점수를 설계)
+def _score_from_anchors(value, anchors):
+    if value <= anchors[0][0]:
+        return float(anchors[0][1])
+    if value >= anchors[-1][0]:
+        return float(anchors[-1][1])
+    for i in range(1, len(anchors)):
+        v0, s0 = anchors[i - 1]
+        v1, s1 = anchors[i]
+        if value <= v1:
+            t = (value - v0) / (v1 - v0)
+            return s0 + t * (s1 - s0)
+    return float(anchors[-1][1])
+
+
+# 정상범위 기준점(실제 정면 셀카 측정 분포로 보정). 측정값 단위는 주석 참고.
+_ASYM_ANCHORS = [(0, 100), (2, 92), (4, 80), (7, 60), (12, 30), (20, 0)]      # 양쪽 짝 위치 차이 평균(얼굴 크기 대비 %)
+_BALANCE_ANCHORS = [(0, 100), (4, 92), (8, 82), (13, 65), (20, 35), (30, 0)]  # 좌우 얼굴 폭 차이(%)
+_DARK_ANCHORS = [(0, 100), (3, 92), (8, 78), (15, 55), (25, 25), (40, 0)]     # 눈밑이 볼보다 어두운 정도(%)
+_WRINKLE_ANCHORS = [(1.0, 100), (1.5, 90), (2.5, 72), (4.0, 45), (6.0, 15), (8.0, 0)]  # 주름 부위 결이 볼의 몇 배인지(배)
+
+
 def _inplane_roll(face, w, h):
     """
     [2단계 각도 보정] 얼굴이 화면에서 얼마나 '갸웃' 기울었는지(roll)를 라디안으로 구합니다.
@@ -677,20 +701,26 @@ def _compute_scores(face, w, h):
         horizontal = abs((midline_x - lx) - (rx - midline_x)) / face_width
         vertical = abs(ly - ry) / face_height
         errors.append(horizontal + vertical)
-    mean_error = sum(errors) / len(errors)
-    symmetry_score = round(max(0.0, min(100.0, 100.0 - mean_error * 250.0)))
+    # 양쪽 짝 위치 차이 평균을 '얼굴 크기 대비 %'로 환산(근거값) → 정상범위 기준으로 점수화
+    asym_pct = (sum(errors) / len(errors)) * 100.0
+    symmetry_score = round(_score_from_anchors(asym_pct, _ASYM_ANCHORS))
 
     # 좌우 끝점(234=사진 왼쪽=사용자 오른쪽, 454=사진 오른쪽=사용자 왼쪽)
     left_width = abs(midline_x - P(234)[0])
     right_width = abs(P(454)[0] - midline_x)
     avg_width = (left_width + right_width) / 2
-    imbalance = abs(left_width - right_width) / avg_width if avg_width > 0 else 0
-    balance_score = round(max(0.0, min(100.0, 100.0 - imbalance * 150.0)))
+    # 좌우 얼굴 폭 차이를 % 로 환산(근거값) → 정상범위 기준으로 점수화
+    balance_pct = (abs(left_width - right_width) / avg_width * 100.0) if avg_width > 0 else 0.0
+    balance_score = round(_score_from_anchors(balance_pct, _BALANCE_ANCHORS))
 
     # 더 넓은(부은) 쪽 = 케어가 필요한 쪽. 사용자 기준으로 표기합니다.
     care_side = "오른쪽" if left_width > right_width else "왼쪽"
 
-    return {"symmetry": symmetry_score, "balance": balance_score, "care_side": care_side}
+    return {
+        "symmetry": symmetry_score, "balance": balance_score, "care_side": care_side,
+        "asym_pct": round(asym_pct, 1),      # 근거: 양쪽 차이 평균(%)
+        "balance_pct": round(balance_pct, 1),  # 근거: 좌우 폭 차이(%)
+    }
 
 
 def _normalize_lighting(image):
@@ -771,11 +801,13 @@ def _compute_dark_circles(image, face, w, h):
     cl = _gray_patch(gray, face[50].x, face[50].y, w, h, rad)
     cr = _gray_patch(gray, face[280].x, face[280].y, w, h, rad)
     if min(ul.size, ur.size, cl.size, cr.size) == 0:
-        return 0
+        return {"score": 0, "basis": "측정 불가"}
     under_m = float(np.mean([ul.mean(), ur.mean()]))
     cheek_m = float(np.mean([cl.mean(), cr.mean()]))
-    rel = max(0.0, (cheek_m - under_m) / (cheek_m + 1e-6))  # 눈밑이 더 어두운 비율
-    return round(max(0.0, min(100.0, 100.0 - rel * 240.0)))
+    # 눈밑이 볼보다 어두운 정도를 % 로 환산(근거값) → 정상범위 기준으로 점수화
+    darkness_pct = max(0.0, (cheek_m - under_m) / (cheek_m + 1e-6)) * 100.0
+    score = round(_score_from_anchors(darkness_pct, _DARK_ANCHORS))
+    return {"score": score, "basis": f"눈밑이 볼보다 {darkness_pct:.0f}% 어두움"}
 
 
 def _compute_wrinkles(image, face, w, h):
@@ -806,9 +838,11 @@ def _compute_wrinkles(image, face, w, h):
     base = [lapvar(face[50].x, face[50].y), lapvar(face[280].x, face[280].y)]
     base = [v for v in base if v is not None]
     if not regions or not base:
-        return 0
+        return {"score": 0, "basis": "측정 불가"}
+    # 주름 부위 결이 매끈한 볼의 몇 배인지(근거값) → 정상범위 기준으로 점수화
     ratio = (sum(regions) / len(regions)) / (sum(base) / len(base) + 1e-6)
-    return round(max(0.0, min(100.0, 100.0 - (ratio - 1.0) * 18.0)))
+    score = round(_score_from_anchors(ratio, _WRINKLE_ANCHORS))
+    return {"score": score, "basis": f"주름 부위 결이 볼의 {ratio:.1f}배"}
 
 
 def _validate_face(face, w, h):
@@ -940,8 +974,10 @@ def _detect_and_score(raw):
     signature = _compute_signature(face, width, height)
     gender = _estimate_gender(image, face, width, height)
     age = _estimate_age(image, face, width, height)
-    dark_circle = _compute_dark_circles(image, face, width, height)
-    wrinkle = _compute_wrinkles(image, face, width, height)
+    dc = _compute_dark_circles(image, face, width, height)
+    wr = _compute_wrinkles(image, face, width, height)
+    dark_circle = dc["score"]
+    wrinkle = wr["score"]
     # 화면 표시용 좌표. x, y는 0~1 비율, z는 상대 깊이(간이 3D 표시에 사용).
     landmarks = [{"x": round(p.x, 4), "y": round(p.y, 4), "z": round(p.z, 4)} for p in face]
     return {
@@ -956,6 +992,13 @@ def _detect_and_score(raw):
         "dark_circle": dark_circle,  # 다크서클 점수(높을수록 양호)
         "wrinkle": wrinkle,          # 주름 점수(높을수록 양호)
         "pose": pose,  # 머리 각도(정면 정도) — 측정 보정·검증용
+        # 점수 근거(측정값+단위) — 점수가 왜 그런지 보여주기 위함
+        "basis": {
+            "symmetry": f"양쪽 차이 평균 {scores['asym_pct']}%",
+            "balance": f"좌우 폭 차이 {scores['balance_pct']}%",
+            "dark_circle": dc["basis"],
+            "wrinkle": wr["basis"],
+        },
         "landmark_count": len(face),
         "landmarks": landmarks,
     }
@@ -1006,6 +1049,7 @@ async def analyze_face(file: UploadFile = File(...)):
         "image_size": {"width": res["width"], "height": res["height"]},
         "scores": _score_list(res["scores"]["symmetry"], res["scores"]["balance"], res["dark_circle"], res["wrinkle"]),
         "age": res.get("age", ""),
+        "basis": res.get("basis"),  # 점수 근거(측정값+단위)
     }
 
 
@@ -1098,6 +1142,7 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
             "angle_corrected": True, # 점수 각도 보정(2단계) 적용
             "light_corrected": True, # 조명 보정 피부톤(3단계) 적용
         },
+        "basis": res.get("basis"),  # 점수 근거(측정값+단위) — 점수식 근거화
         "record": _record_dict(new_id, created_at, symmetry, balance, filename, care_side, signature_json, dark_circle, wrinkle, age),
     }
 
@@ -1295,8 +1340,8 @@ def _reproducibility_metrics(img):
     return {
         "symmetry": sc["symmetry"],
         "balance": sc["balance"],
-        "dark_circle": _compute_dark_circles(img, face, w, h),
-        "wrinkle": _compute_wrinkles(img, face, w, h),
+        "dark_circle": _compute_dark_circles(img, face, w, h)["score"],
+        "wrinkle": _compute_wrinkles(img, face, w, h)["score"],
     }
 
 
