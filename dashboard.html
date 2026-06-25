@@ -229,9 +229,19 @@
     <a class="copy-btn" href="https://neko1015-facefit-backend.hf.space/accuracy" target="_blank" rel="noopener">열기 ↗</a>
   </div>
 
+  <div class="card">
+    <div class="icon">📍</div>
+    <div class="card-body">
+      <div class="card-title">부위별 처방(Zone) 정확도</div>
+      <div class="card-desc">한쪽을 부풀려 정답 생성 → 케어 부위 지목 정확도 실측</div>
+      <a class="card-url" href="https://neko1015-facefit-backend.hf.space/zone" target="_blank" rel="noopener">https://neko1015-facefit-backend.hf.space/zone</a>
+    </div>
+    <a class="copy-btn" href="https://neko1015-facefit-backend.hf.space/zone" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+
   <div class="section-title">📋 개발 로드맵 (전체 할 일)</div>
   <div class="progress-bar"><div class="progress-fill"></div></div>
-  <div class="progress-text">앱 핵심 기능 약 <b>95%</b> 완료 · 현재 <b>AI 엔진 보강 단계</b> 진행(1순위 정확도·일관성 완료: 1·2·3단계+점수식 근거화 / 2순위 진행 중)</div>
+  <div class="progress-text">앱 핵심 기능 약 <b>95%</b> 완료 · <b>AI 엔진 보강</b> 1순위(정확도·일관성)·2순위(검증 체계: 재현성·정확도·Zone)·4순위(성능·동시접속) 완료</div>
 
   <div class="road-group">
     <h3 class="rg-done">✅ 완료</h3>
@@ -288,7 +298,7 @@
     <h3 class="rg-todo">🥈 2순위 · 검증 체계 (LG 지표 실측)</h3>
     <div class="road-item done"><span class="ck">✅</span><span class="t">재현성 측정 <span class="sub">반복 촬영 시 점수 안정성 수치화 — 종합 재현성 측정·페이지(/stability) 배포. 비대칭98·부기94·다크서클99·주름82점</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">검출률·정확도 평가셋 구축 <span class="sub">정답 아는 합성 평가셋으로 실측 — 얼굴검출 100%·비얼굴거부 100%·대칭정확도 97.9(오차2.1) · 페이지(/accuracy) 배포</span></span></div>
-    <div class="road-item"><span class="ck">📋</span><span class="t">부위별 처방·Zone 정확도 평가셋</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">부위별 처방·Zone 정확도 평가셋 <span class="sub">한쪽을 부풀려 정답 생성 → 엔진이 그 쪽 케어로 지목하는지 측정. Zone 정확도 94% · 페이지(/zone) 배포</span></span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-todo">🥉 3순위 · 측정 항목 확장 &nbsp;|&nbsp; 4순위 · 성능·안정성</h3>
@@ -351,7 +361,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">검출률·정확도 평가셋 + /accuracy <span class="sub">검출 100%·거부 100%·대칭정확도 97.9 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">부위별 처방(Zone) 정확도 평가셋 + /zone <span class="sub">케어 부위 지목 정확도 94% — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">검출률·정확도 평가셋 + /accuracy <span class="sub">검출 100%·거부 100%·대칭정확도 97.9</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">성능·동시 접속 <span class="sub">사진 다운스케일(231→131ms)·검출 잠금·분석 스레드 오프로드</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">점수식 근거화 <span class="sub">측정값(%·배)+정상범위 기준점으로 점수 재설계 + 근거값 표시</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">측정 재현성 수치화 + /stability 페이지 <span class="sub">반복 촬영 안정성: 비대칭98·부기94·다크서클99·주름82점</span></span></div>
@@ -466,6 +477,10 @@
       body: '<p><b>문제</b> — 피부 밝기·붉은기를 색의 절대값으로 재다 보니, 따뜻한 조명에선 멀쩡한 피부가 "홍조"로, 어두운 곳에선 "어두운 톤"으로 잘못 잡혔어요.</p>'
         + '<p><b>어떻게</b> — ① <b>그레이월드</b>로 조명의 색 기운(따뜻/차가움)을 중화하고 ② <b>밝기 정규화</b>로 노출 차이를 줄인 뒤 피부색을 쟀습니다.</p>'
         + '<p><b>검증</b> — 같은 얼굴에 조명 15종을 입혀 측정: 흔들림이 밝기 <span class="num">std 30.8→12.1</span>, 붉은기 <span class="num">23.9→6.6</span>으로 크게 안정됐어요. (보정 후 값 스케일에 맞춰 추천·라벨 기준도 조정)</p>' },
+    zone: { match: ['부위별 처방·Zone', '부위별 처방(Zone)', 'Zone 정확도'], title: '부위별 처방(Zone) 정확도',
+      body: '<p><b>무엇</b> — 엔진이 \'어느 쪽을 케어해야 하는지\'(좌/우)를 정확히 짚는지 평가해요.</p>'
+        + '<p><b>어떻게</b> — 실제 얼굴의 한쪽 절반을 13% 넓혀 <b>\'한쪽이 부은 얼굴\'</b>을 만들면 정답은 \'그 부은 쪽 케어\'. 엔진이 매긴 케어 부위가 부푼 쪽과 일치하는지 셉니다.</p>'
+        + '<p><b>결과</b> — Zone 처방 정확도 <span class="num">94%</span>(15/16). 부풀리면 부기 점수가 79.6→64.2로 떨어져 \'케어 필요\'로 올바르게 반응. (원래부터 반대로 심하게 비대칭인 얼굴은 드물게 안 뒤집힘 — /zone 페이지에서 실시간)</p>' },
     acc: { match: ['검출률·정확도 평가셋', '검출률·정확도 평가'], title: '검출률 · 정확도 평가셋',
       body: '<p><b>고민</b> — 정확도를 재려면 \'정답\'이 필요한데 의료 라벨 데이터가 없었어요.</p>'
         + '<p><b>어떻게</b> — \'정답을 만들 수 있는\' 합성 평가셋을 설계했어요. ① 얼굴은 검출 성공해야, 비얼굴(회색·노이즈·그라데이션)은 거부해야. ② 얼굴 반쪽을 거울 복제해 <b>완벽 대칭 얼굴</b>을 만들면 정답이 100점 → 엔진 점수가 100에 얼마나 가까운지로 정확도 측정.</p>'
@@ -545,6 +560,7 @@
 
   // 완료 항목별 '적용(배포) 날짜'. match 글이 항목에 들어가면 그 날짜를 붙입니다(위에서부터 우선).
   var DATES = [
+    { d: '2026-06-25', m: ['부위별 처방·Zone', '부위별 처방(Zone)', 'Zone 정확도'] },
     { d: '2026-06-25', m: ['검출률·정확도 평가'] },
     { d: '2026-06-25', m: ['처리 속도·동시 접속', '성능·동시 접속'] },
     { d: '2026-06-25', m: ['점수식 근거화'] },
