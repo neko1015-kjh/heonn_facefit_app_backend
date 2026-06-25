@@ -160,7 +160,7 @@
   .mock-note .tag { display:inline-block; background:rgba(96,165,250,.15); color:var(--blue); font-size:11px; border-radius:6px; padding:1px 7px; margin-right:4px; }
   /* 목업 좌우 스와이프 내비 */
   .mockrow { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px; }
-  .mockarrow { width: 36px; height: 36px; border-radius: 50%; background: #161619; border: 1px solid #2a2a2e; color: var(--amber); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; user-select: none; }
+  .mockarrow { width: 36px; height: 36px; border-radius: 50%; background: #161619; border: 1px solid #2a2a2e; color: var(--amber); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; -webkit-user-select: none; user-select: none; }
   .mockarrow:hover { border-color: var(--amber); background: #1f1f23; }
   .mocktag { color: var(--text); font-size: 13px; font-weight: 700; min-width: 96px; text-align: center; }
   .mockdots { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
@@ -412,7 +412,8 @@
   <div class="section-title">🗓️ 배포 내역 <span class="section-note">(수정·배포된 버전 기록 — 최신순)</span></div>
   <div class="road-group">
     <h3 class="rg-done">📱 앱(APK) 버전</h3>
-    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v13</b> · 점수 근거값 표시 <span class="sub">스캔·리포트 점수마다 근거(좌우 폭 차이 5.9% 등) 표시 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">🛠️</span><span class="t"><b>v14</b> · 인앱 카메라 촬영 <span class="sub">앱 안에서 카메라 실행 + 얼굴 가이드 타원 + 실시간 안내(정면·위치) — 코드 완료, ⏳ APK는 EAS 무료 빌드 한도 리셋(7/1) 후 생성</span></span></div>
+    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v13</b> · 점수 근거값 표시 <span class="sub">스캔·리포트 점수마다 근거(좌우 폭 차이 5.9% 등) 표시 — 설치 가능한 최신</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v12</b> · 측정 보정 표시 <span class="sub">스캔 결과 보정 배지(정면·각도·조명) + 리포트 '측정 신뢰도' 카드</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v11</b> · 진짜 카카오 로그인 <span class="sub">인앱 브라우저로 실제 카카오 인증 → 앱 복귀 · 영구 계정 · 로그인도 콜드스타트 재시도</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v10</b> · 로그인 후 약관·개인정보(얼굴) 동의 절차 <span class="sub">필수2·선택1 동의 + 서버 기록</span></span></div>
@@ -455,6 +456,26 @@
     <div class="road-item mock-item" onclick="openMock('report')"><span class="ck">📊</span><span class="t">리포트 — 점수 링 차트 + 근거 강조 <span class="sub">종합 점수 도넛, 항목별 카드에 근거값(좌우 폭 차이 등) 표시</span><span class="dhint">🖼️ 예상 화면 보기 ▸</span></span></div>
     <div class="road-item mock-item" onclick="openMock('care')"><span class="ck">🔥</span><span class="t">케어 — 풀스크린 타이머 + 부위 맵 <span class="sub">원형 타이머·진행률, 케어 부위 하이라이트, 온도·진동 칩</span><span class="dhint">🖼️ 예상 화면 보기 ▸</span></span></div>
     <div class="road-item mock-item" onclick="openMock('design')"><span class="ck">🎨</span><span class="t">디자인 시스템 — 색·타이포·컴포넌트 <span class="sub">통일된 색·글자 크기·버튼/칩/카드 규칙으로 일관성↑</span><span class="dhint">🖼️ 예상 화면 보기 ▸</span></span></div>
+  </div>
+
+  <div class="section-title">📷 인앱 카메라 — 후속 개발·디자인 <span class="section-note">(코드 완료 · APK 빌드 대기 중)</span></div>
+  <div class="progress-text">"카메라 촬영"을 누르면 <b>앱 안에서 카메라가 켜지고</b>, 얼굴 가이드 타원 + 실시간 안내(정면·거리·위치)가 동작하도록 구현했어요. 코드는 완료됐고 <b>APK는 EAS 무료 빌드 한도가 리셋되는 7/1 이후</b> 생성합니다. 아래는 설치 후 다듬을 항목이에요.</div>
+  <div class="road-group">
+    <h3 class="rg-todo">🔴 실제 단말 테스트 (설치 후 필수)</h3>
+    <div class="road-item"><span class="ck">🔴</span><span class="t">기종별 카메라 권한·전면 카메라·미리보기 동작 확인 <span class="sub">안드로이드 버전·제조사별 차이</span></span></div>
+    <div class="road-item"><span class="ck">🔴</span><span class="t">실시간 가이드 기준값 미세조정 <span class="sub">타원 크기·중심·거리 임계값을 실제 촬영감에 맞게</span></span></div>
+  </div>
+  <div class="road-group">
+    <h3 class="rg-todo">🟠 사용성·디자인 보강</h3>
+    <div class="road-item"><span class="ck">🟠</span><span class="t">타원 바깥 어둡게(딤) 처리 <span class="sub">현재는 점선 테두리만 — 얼굴 영역에 집중되도록 마스크</span></span></div>
+    <div class="road-item"><span class="ck">🟠</span><span class="t">자동 촬영 옵션 <span class="sub">정렬이 좋으면 3·2·1 카운트다운 후 자동 촬영</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">정렬 완료 시 햅틱(진동) 피드백</span></div>
+  </div>
+  <div class="road-group">
+    <h3 class="rg-todo">🟡 성능·안정성</h3>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">가이드 프레임 임시파일 정리 <span class="sub">미리보기 캡처가 캐시에 쌓이지 않게 주기적 삭제</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">데이터·배터리 최적화 <span class="sub">호출 주기(현재 1.5초)·화질 조정 / 향후 온디바이스 얼굴감지(무네트워크) 검토</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">웹은 시스템 카메라 폴백(가이드 없음) 안내 <span class="sub">인앱 카메라는 휴대폰 앱 전용</span></span></div>
   </div>
 
   <div class="section-title">👤 운영 계정 <span class="section-note">(카드의 "열기"로 관리 페이지 바로 이동)</span></div>
