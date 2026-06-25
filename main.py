@@ -1505,6 +1505,181 @@ def stability_page(refresh: int = 0):
     return html
 
 
+# ─────────────────────────────────────────────────────────────
+# 검출률·정확도 평가셋 — '정답을 아는' 데이터로 엔진 정확도를 실측합니다. (엔진 2순위 검증 체계)
+#  1) 검출률: 얼굴=검출 성공해야 / 비(非)얼굴=거부해야
+#  2) 대칭·부기 정확도: 얼굴 반쪽을 거울 복제해 '완벽 대칭 얼굴'을 만들면 정답이 100점 → 실제 점수와의 오차 측정
+# ─────────────────────────────────────────────────────────────
+_ACC_CACHE = None
+
+
+def _make_symmetric(image, midline_x):
+    """midline_x를 기준으로 왼쪽 절반을 오른쪽에 거울 복제 → 완벽 대칭 얼굴(정답=100점)."""
+    h, w = image.shape[:2]
+    mx = max(1, min(w - 1, int(round(midline_x))))
+    mirror = cv2.flip(image[:, :mx], 1)
+    sym = image.copy()
+    n = min(mirror.shape[1], w - mx)
+    sym[:, mx:mx + n] = mirror[:, :n]
+    return sym
+
+
+def _encode_jpg(img):
+    ok, enc = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    return enc.tobytes() if ok else None
+
+
+def _run_accuracy_eval(sample_n=6):
+    conn = db.connect()
+    try:
+        rows = conn.execute(
+            "SELECT image_data FROM scans WHERE image_data IS NOT NULL ORDER BY id DESC LIMIT ?",
+            (sample_n,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    det_total = det_ok = 0
+    sym_gt, bal_gt, orig_sym = [], [], []
+    for row in rows:
+        if row[0] is None:
+            continue
+        raw = bytes(row[0])
+        r = _detect_and_score(raw)
+        det_total += 1
+        if not r.get("detected"):
+            continue
+        det_ok += 1
+        orig_sym.append(r["scores"]["symmetry"])
+        # 완벽 대칭 얼굴 생성 → 점수가 100에 얼마나 가까운지(정확도)
+        lm = r["landmarks"]
+        img = _downscale_for_analysis(cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR))
+        h, w = img.shape[:2]
+        mids = [lm[i]["x"] for i in (10, 1, 152) if i < len(lm)]
+        if not mids:
+            continue
+        sym_raw = _encode_jpg(_make_symmetric(img, (sum(mids) / len(mids)) * w))
+        if not sym_raw:
+            continue
+        r2 = _detect_and_score(sym_raw)
+        if r2.get("detected"):
+            sym_gt.append(r2["scores"]["symmetry"])
+            bal_gt.append(r2["scores"]["balance"])
+
+    # 비얼굴(거부 기대) — 회색·노이즈·그라데이션
+    negs = []
+    negs.append(np.full((600, 480, 3), 128, np.uint8))
+    grad = np.tile(np.linspace(0, 255, 480, dtype=np.uint8), (600, 1))
+    negs.append(cv2.cvtColor(grad, cv2.COLOR_GRAY2BGR))
+    noise = (np.abs(np.sin(np.arange(600 * 480 * 3).reshape(600, 480, 3))) * 255).astype(np.uint8)
+    negs.append(noise)
+    rej_total = len(negs)
+    rej_ok = sum(1 for n in negs if not _detect_and_score(_encode_jpg(n)).get("detected"))
+
+    def mean(a):
+        return round(float(np.mean(a)), 1) if a else 0.0
+
+    return {
+        "det_total": det_total, "det_ok": det_ok,
+        "det_rate": round(100 * det_ok / det_total) if det_total else 0,
+        "rej_total": rej_total, "rej_ok": rej_ok,
+        "rej_rate": round(100 * rej_ok / rej_total) if rej_total else 0,
+        "sym_acc": mean(sym_gt), "sym_err": round(100 - mean(sym_gt), 1),
+        "bal_acc": mean(bal_gt), "bal_err": round(100 - mean(bal_gt), 1),
+        "orig_sym": mean(orig_sym),
+    }
+
+
+# 검출률·정확도 평가 페이지 ("/accuracy")
+@app.get("/accuracy", response_class=HTMLResponse)
+def accuracy_page(refresh: int = 0):
+    global _ACC_CACHE
+    if _ACC_CACHE is None or refresh:
+        try:
+            _ACC_CACHE = _run_accuracy_eval(sample_n=6)
+        except Exception as e:
+            print("정확도 평가 실패:", e)
+            return "<h1>평가 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.</h1>"
+    d = _ACC_CACHE
+
+    def grade(score, good, ok):
+        if score >= good:
+            return "우수", "g-ok"
+        if score >= ok:
+            return "양호", "g-warn"
+        return "개선 필요", "g-bad"
+
+    dg, dgc = grade(d["det_rate"], 95, 80)
+    rg, rgc = grade(d["rej_rate"], 95, 70)
+    sg, sgc = grade(d["sym_acc"], 95, 88)
+    bg, bgc = grade(d["bal_acc"], 95, 88)
+
+    html = """<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>HeOnn FaceFit — 검출률·정확도 평가</title>
+<style>
+  body { margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px 16px 60px; }
+  .wrap { max-width:720px; margin:0 auto; }
+  .back { display:inline-block; margin-bottom:16px; color:#fbbf24; text-decoration:none; font-size:13px; }
+  h1 { color:#fbbf24; font-size:22px; text-align:center; margin-bottom:4px; }
+  .sub { color:#a1a1aa; font-size:13px; text-align:center; line-height:1.6; margin-bottom:18px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:520px){ .grid { grid-template-columns:1fr; } }
+  .scard { background:#18181b; border:1px solid #27272a; border-radius:14px; padding:16px; }
+  .srow { display:flex; justify-content:space-between; align-items:center; }
+  .sname { font-size:14px; font-weight:600; }
+  .sbadge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }
+  .g-ok { background:rgba(52,211,153,.15); color:#34d399; }
+  .g-warn { background:rgba(251,191,36,.15); color:#fbbf24; }
+  .g-bad { background:rgba(248,113,113,.15); color:#f87171; }
+  .sbig { color:#f4f4f5; font-size:30px; font-weight:800; margin:10px 0 8px; }
+  .sunit { font-size:14px; color:#a1a1aa; font-weight:500; margin-left:2px; }
+  .strack { height:8px; background:#27272a; border-radius:999px; overflow:hidden; }
+  .sfill { height:100%; background:linear-gradient(90deg,#fbbf24,#34d399); border-radius:999px; }
+  .snote { color:#71717a; font-size:11px; margin-top:8px; line-height:1.5; }
+  .how { background:#18181b; border:1px solid #27272a; border-radius:14px; padding:16px; margin-top:18px; color:#a1a1aa; font-size:13px; line-height:1.7; }
+  .how b { color:#fbbf24; }
+  .refresh { display:inline-block; margin-top:16px; color:#a1a1aa; border:1px solid #3f3f46; border-radius:8px; padding:7px 14px; font-size:12px; text-decoration:none; }
+  .refresh:hover { color:#fbbf24; border-color:#fbbf24; }
+</style></head><body><div class="wrap">
+<a class="back" href="/dashboard">← 대시보드로</a>
+<h1>검출률 · 정확도 평가</h1>
+<div class="sub">'정답을 아는' 데이터로 엔진을 실측했어요. 얼굴/비얼굴을 제대로 가리는지(검출률),<br/>완벽 대칭으로 만든 얼굴을 100점에 가깝게 매기는지(정확도)로 평가합니다.</div>
+<div class="grid">
+  <div class="scard"><div class="srow"><span class="sname">얼굴 검출률</span><span class="sbadge __DGC__">__DG__</span></div>
+    <div class="sbig">__DET__<span class="sunit">%</span></div><div class="strack"><div class="sfill" style="width:__DET__%"></div></div>
+    <div class="snote">얼굴 사진 __DTOT__장 중 __DOK__장 검출 성공</div></div>
+  <div class="scard"><div class="srow"><span class="sname">오검출 방지(비얼굴 거부)</span><span class="sbadge __RGC__">__RG__</span></div>
+    <div class="sbig">__REJ__<span class="sunit">%</span></div><div class="strack"><div class="sfill" style="width:__REJ__%"></div></div>
+    <div class="snote">비얼굴(회색·노이즈·그라데이션) __RTOT__개 중 __ROK__개 올바르게 거부</div></div>
+  <div class="scard"><div class="srow"><span class="sname">대칭 정확도</span><span class="sbadge __SGC__">__SG__</span></div>
+    <div class="sbig">__SYM__<span class="sunit">점</span></div><div class="strack"><div class="sfill" style="width:__SYM__%"></div></div>
+    <div class="snote">완벽 대칭 얼굴의 비대칭 점수(정답 100) · 오차 ±__SYMERR__</div></div>
+  <div class="scard"><div class="srow"><span class="sname">부기 정확도</span><span class="sbadge __BGC__">__BG__</span></div>
+    <div class="sbig">__BAL__<span class="sunit">점</span></div><div class="strack"><div class="sfill" style="width:__BAL__%"></div></div>
+    <div class="snote">완벽 대칭 얼굴의 부기 점수(정답 100) · 오차 ±__BALERR__</div></div>
+</div>
+<div class="how">
+  <b>어떻게 평가하나요?</b><br/>
+  ① <b>검출률</b> — 실제 얼굴은 검출에 성공해야 하고, 얼굴이 아닌 이미지(회색·노이즈·그라데이션)는 거부해야 맞습니다.<br/>
+  ② <b>정확도</b> — 얼굴 반쪽을 거울처럼 복제해 <b>완벽히 대칭인 얼굴</b>을 만들면 정답이 100점이에요. 엔진이 매긴 점수가 100에 가까울수록 정확합니다.<br/>
+  ③ <b>변별력</b> — 원본(비대칭) 평균 __OSYM__점 → 대칭화 __SYM__점으로 올라가, 대칭일수록 점수가 높아지는 걸 확인했어요.<br/><br/>
+  ※ 의료용 정답 데이터가 아니라, '정답을 만들 수 있는' 합성 평가셋입니다. 표본을 늘리고 사람이 라벨링한 데이터로 더 정밀화하는 게 다음 단계예요.
+</div>
+<a class="refresh" href="/accuracy?refresh=1">다시 평가</a>
+</div></body></html>"""
+    rep = {
+        "__DET__": d["det_rate"], "__DTOT__": d["det_total"], "__DOK__": d["det_ok"], "__DG__": dg, "__DGC__": dgc,
+        "__REJ__": d["rej_rate"], "__RTOT__": d["rej_total"], "__ROK__": d["rej_ok"], "__RG__": rg, "__RGC__": rgc,
+        "__SYM__": d["sym_acc"], "__SYMERR__": d["sym_err"], "__SG__": sg, "__SGC__": sgc,
+        "__BAL__": d["bal_acc"], "__BALERR__": d["bal_err"], "__BG__": bg, "__BGC__": bgc,
+        "__OSYM__": d["orig_sym"],
+    }
+    for k, v in rep.items():
+        html = html.replace(k, str(v))
+    return html
+
+
 # 분석 사진 갤러리 페이지 — 저장된 분석 사진을 모아 봅니다. ("/gallery")
 @app.get("/gallery", response_class=HTMLResponse)
 def gallery():
