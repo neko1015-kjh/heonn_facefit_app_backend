@@ -2112,6 +2112,15 @@ def gallery():
   function render3D(lm){
     var c = document.getElementById('pc'), ctx = c.getContext('2d');
     var W = c.width, H = c.height, n = lm.length;
+    // [각도 보정 반영] 이마(10)→턱(152) 기울기만큼 코끝(1) 기준으로 회전시켜 얼굴을 똑바로 세웁니다.
+    if(lm[10] && lm[152] && lm[1]){
+      var roll = Math.atan2(lm[152].x - lm[10].x, lm[152].y - lm[10].y);
+      var ca = Math.cos(roll), sa = Math.sin(roll), ox = lm[1].x, oy = lm[1].y;
+      lm = lm.map(function(p){
+        var dx = p.x - ox, dy = p.y - oy;
+        return { x: ox + dx*ca - dy*sa, y: oy + dx*sa + dy*ca, z: p.z };
+      });
+    }
     var cx=0, cy=0, cz=0;
     for(var i=0;i<n;i++){ cx+=lm[i].x; cy+=lm[i].y; cz+=lm[i].z; }
     cx/=n; cy/=n; cz/=n;
