@@ -379,7 +379,8 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    # face_embedding: 정식 얼굴 임베딩(SFace) 모델이 로드됐는지 (동일인 판별 진단용)
+    return {"status": "ok", "face_embedding": face_recognizer is not None}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1047,6 +1048,26 @@ def _compute_embedding(image, face, w, h):
         return []
 
 
+def _embedding_from_raw(raw):
+    """저장된 사진 데이터(raw)에서 얼굴 임베딩을 다시 추출합니다. (옛 기록 비교용, 실패 시 [])"""
+    if face_recognizer is None or not raw:
+        return []
+    try:
+        image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            return []
+        image = _downscale_for_analysis(image)
+        h, w = image.shape[:2]
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        result = _safe_detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+        if not result.face_landmarks:
+            return []
+        return _compute_embedding(image, result.face_landmarks[0], w, h)
+    except Exception as e:
+        print("이전 사진 임베딩 재계산 실패:", e)
+        return []
+
+
 def _embedding_cosine(a, b):
     """두 임베딩의 코사인 유사도(1에 가까울수록 같은 사람). 비교 불가 시 None."""
     if not a or not b or len(a) != len(b):
@@ -1229,54 +1250,34 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     if not res["detected"]:
         return res  # 얼굴을 못 찾으면 저장하지 않음
 
-    # 직전에 분석한 내 사진과 '같은 사람'인지 확인합니다.
-    # 1순위: 정식 얼굴 임베딩(코사인 유사도) — 각도·표정·조명에 강함.
-    # 임베딩을 못 쓰면(옛 기록·추출 실패) 예전 방식(얼굴 비율 + 성별)으로 대체합니다.
+    # 직전에 분석한 내 사진과 '같은 사람'인지 확인합니다. (정식 얼굴 임베딩 코사인 유사도)
+    # 임베딩은 각도·표정·조명에 강해, 같은 사람을 '다른 사람'으로 오탐하던 문제를 막습니다.
     cur_gender = res.get("gender", "")
     cur_emb = res.get("embedding") or []
     conn = db.connect()
     prev = conn.execute(
-        "SELECT signature, gender, embedding FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+        "SELECT embedding, image_data FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1",
         (user_id,),
     ).fetchone()
     conn.close()
     if prev:
-        prev_sig_json, prev_gender = prev[0], prev[1]
-        prev_emb_json = prev[2] if len(prev) > 2 else ""
         try:
-            prev_emb = json.loads(prev_emb_json) if prev_emb_json else []
+            prev_emb = json.loads(prev[0]) if prev[0] else []
         except (ValueError, TypeError):
             prev_emb = []
+        # 옛 기록이라 임베딩이 없으면, 저장된 사진에서 즉석으로 다시 계산해 항상 임베딩끼리 비교
+        if not prev_emb and len(prev) > 1 and prev[1] is not None:
+            prev_emb = _embedding_from_raw(bytes(prev[1]))
 
         cos = _embedding_cosine(cur_emb, prev_emb)
-        if cos is not None:
-            # ── 정식 임베딩 비교 (둘 다 있을 때) ──
-            if cos < EMB_THRESHOLD:
-                return {
-                    "detected": False,
-                    "different_person": True,
-                    "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
-                }
-        else:
-            # ── 대체: 얼굴 비율 + 성별 ──
-            if prev_sig_json:
-                try:
-                    prev_sig = json.loads(prev_sig_json)
-                except (ValueError, TypeError):
-                    prev_sig = []
-                dist = _signature_distance(res["signature"], prev_sig)
-                if dist is not None and dist > SIG_THRESHOLD:
-                    return {
-                        "detected": False,
-                        "different_person": True,
-                        "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
-                    }
-            if prev_gender and cur_gender and prev_gender != cur_gender:
-                return {
-                    "detected": False,
-                    "different_person": True,
-                    "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
-                }
+        # 임베딩 비교가 가능할 때만, 그리고 분명히 다를 때(코사인 < 0.363)만 차단합니다.
+        # 비교가 불가능하면(모델 미가용 등) 차단하지 않아, 같은 사람을 막는 오탐을 방지합니다.
+        if cos is not None and cos < EMB_THRESHOLD:
+            return {
+                "detected": False,
+                "different_person": True,
+                "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
+            }
 
     # 사진 식별용 이름(실제 사진 데이터는 DB에 함께 저장합니다)
     filename = f"{uuid.uuid4().hex}.jpg"
