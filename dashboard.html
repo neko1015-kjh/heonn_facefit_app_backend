@@ -369,7 +369,7 @@
     <h3 class="rg-todo">🥉 3순위 · 측정 항목 확장 &nbsp;|&nbsp; 4순위 · 성능·안정성</h3>
     <div class="road-item"><span class="ck">📋</span><span class="t">표정·눈 비대칭 측정 (블렌드셰이프 52종)</span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">주름·다크서클·나이 추정 <span class="sub">나이(Caffe 모델)·다크서클·주름 점수 — 배포 완료, 앱·갤러리 반영</span></span></div>
-    <div class="road-item"><span class="ck">📋</span><span class="t">동일인 판별 정확도 향상 (정식 얼굴 임베딩)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">동일인 판별 정확도 향상 (정식 얼굴 임베딩) <span class="sub">OpenCV SFace 임베딩(코사인 0.363)으로 교체 — 각도·표정 변형에도 유사도 0.98+(비율 방식의 오탐 해결) — 배포</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">처리 속도·동시 접속 + 콜드스타트 완화 <span class="sub">큰 사진 다운스케일(분석 231→131ms) · 검출 잠금+스레드 오프로드(동시 요청 시 안 멈춤) · keep-alive 핑 준비 / ※ 100% 상시가동은 유료 서버 필요</span></span></div>
   </div>
 
@@ -428,7 +428,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">주름 점수 안정화 <span class="sub">밝기 정규화+볼 기준 하한 — 재촬영 흔들림 std 5.0→3.4(변별력 유지) — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">정식 얼굴 임베딩(SFace) 동일인 판별 <span class="sub">각도·표정에 강함(변형 유사도 0.98+) — 비율 방식 오탐 해결 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">주름 점수 안정화 <span class="sub">밝기 정규화+볼 기준 하한 — 재촬영 흔들림 std 5.0→3.4(변별력 유지)</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">부위별 처방(Zone) 정확도 평가셋 + /zone <span class="sub">케어 부위 지목 정확도 94%</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">검출률·정확도 평가셋 + /accuracy <span class="sub">검출 100%·거부 100%·대칭정확도 97.9</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">성능·동시 접속 <span class="sub">사진 다운스케일(231→131ms)·검출 잠금·분석 스레드 오프로드</span></span></div>
@@ -634,9 +635,10 @@
     dashboard: { match: ['대시보드 페이지', '서비스 대시보드'], title: '서비스 대시보드 페이지',
       body: '<p><b>무엇</b> — 지금 보고 계신 이 페이지예요. 서버 상태·접속 주소·개발 로드맵·배포 내역·운영 계정을 한곳에 모았습니다.</p>'
         + '<p><b>어떻게</b> — 공개 주소(/dashboard)와 claude.ai 아티팩트 <b>두 곳</b>에서 같은 내용으로 유지하며, 작업이 끝날 때마다 갱신해요.</p>' },
-    sameperson: { match: ['동일인 판별'], title: '동일인 판별',
+    sameperson: { match: ['동일인 판별'], title: '동일인 판별 (정식 얼굴 임베딩)',
       body: '<p><b>무엇</b> — 이전과 다른 사람 사진으로 비교되지 않도록, 같은 사람인지 확인합니다.</p>'
-        + '<p><b>어떻게</b> — 얼굴 특징점으로 만든 \'얼굴 서명\'과 성별 추정을 비교해, 너무 다르면 본인 사진으로 다시 찍도록 안내해요.</p>' },
+        + '<p><b>어떻게</b> — 얼굴을 <b>임베딩(특징 벡터 128차원)</b>으로 바꿔 직전 사진과 <b>코사인 유사도</b>를 비교해요(같은 사람 기준 0.363, OpenCV SFace 모델). 임베딩을 못 쓸 때만 예전 \'얼굴 비율+성별\' 방식으로 대체.</p>'
+        + '<p><b>개선</b> — 예전 비율 방식은 각도만 바뀌어도 같은 사람을 \'다른 사람\'으로 튕기곤 했는데, 임베딩은 <span class="num">각도·표정 변형에도 유사도 0.98+</span>로 안정적이에요.</p>' },
     landmark: { match: ['478'], title: 'MediaPipe 얼굴 랜드마크 478점',
       body: '<p><b>무엇</b> — 모든 분석의 토대. 얼굴에서 478개의 특징점을 찾아 위치를 잡습니다.</p>'
         + '<p><b>어떻게</b> — 구글 MediaPipe FaceLandmarker로 눈·코·입·윤곽 등 478점을 검출하고, 이 좌표로 비대칭·부기·다크서클·주름·3D 등을 계산해요.</p>' },
@@ -745,6 +747,7 @@
 
   // 완료 항목별 '적용(배포) 날짜'. match 글이 항목에 들어가면 그 날짜를 붙입니다(위에서부터 우선).
   var DATES = [
+    { d: '2026-06-26', m: ['정식 얼굴 임베딩', 'SFace'] },
     { d: '2026-06-25', m: ['주름 점수 안정화', '주름 안정화'] },
     { d: '2026-06-25', m: ['부위별 처방·Zone', '부위별 처방(Zone)', 'Zone 정확도'] },
     { d: '2026-06-25', m: ['검출률·정확도 평가'] },
