@@ -93,6 +93,8 @@ def _init_db():
             conn.execute("ALTER TABLE scans ADD COLUMN wrinkle INTEGER DEFAULT 0")
         if "basis" not in existing:
             conn.execute("ALTER TABLE scans ADD COLUMN basis TEXT DEFAULT ''")
+        if "embedding" not in existing:
+            conn.execute("ALTER TABLE scans ADD COLUMN embedding TEXT DEFAULT ''")
         if "user_id" not in existing:
             conn.execute("ALTER TABLE scans ADD COLUMN user_id INTEGER DEFAULT 0")
         if "image_data" not in existing:
@@ -149,6 +151,7 @@ def _init_db():
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS dark_circle INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS wrinkle INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS basis TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS embedding TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS care_side TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS signature TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 0")
@@ -267,6 +270,26 @@ except Exception as e:
     # 나이 모델 로드 실패해도 서버는 정상 동작(나이 추정만 비활성).
     print("나이 모델 준비 실패(나이 추정 비활성):", e)
     age_net = None
+
+# 정식 얼굴 임베딩(동일인 판별) 모델 — OpenCV 내장 SFace. 없으면 자동 다운로드.
+# 얼굴을 512차원 특징 벡터로 바꿔, 같은 사람은 코사인 유사도가 높게 나옵니다.
+# (기존 '얼굴 비율 서명'보다 각도·표정·조명 변화에 훨씬 강함)
+SFACE_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
+SFACE_PATH = os.path.join(BASE_DIR, "face_recognition_sface_2021dec.onnx")
+# 같은 사람으로 인정하는 코사인 유사도 기준(SFace 공식 권장값)
+EMB_THRESHOLD = 0.363
+
+face_recognizer = None
+try:
+    if not os.path.exists(SFACE_PATH):
+        print("얼굴 임베딩 모델 다운로드 중...")
+        urllib.request.urlretrieve(SFACE_URL, SFACE_PATH)
+    face_recognizer = cv2.FaceRecognizerSF.create(SFACE_PATH, "")
+    print("얼굴 임베딩 모델 준비 완료")
+except Exception as e:
+    # 임베딩 모델 로드 실패해도 서버는 정상 동작(동일인 판별은 기존 비율 방식으로 대체).
+    print("얼굴 임베딩 모델 준비 실패(비율 방식으로 대체):", e)
+    face_recognizer = None
 
 
 def _estimate_gender(image, face, w, h):
@@ -991,6 +1014,50 @@ def _signature_distance(a, b):
 SIG_THRESHOLD = 0.2
 
 
+def _compute_embedding(image, face, w, h):
+    """[정식 얼굴 임베딩] 얼굴을 정렬해 SFace로 특징 벡터를 추출합니다. (실패 시 [])
+    추출한 벡터로 같은 사람인지 코사인 유사도로 비교합니다(비율 방식보다 정확)."""
+    if face_recognizer is None:
+        return []
+    try:
+        xs = [p.x for p in face]
+        ys = [p.y for p in face]
+        x0, y0 = min(xs) * w, min(ys) * h
+        bw, bh = (max(xs) - min(xs)) * w, (max(ys) - min(ys)) * h
+
+        def mid(i, j):
+            return ((face[i].x + face[j].x) / 2 * w, (face[i].y + face[j].y) / 2 * h)
+
+        def pt(i):
+            return (face[i].x * w, face[i].y * h)
+
+        re_x, re_y = mid(33, 133)    # 오른쪽 눈(이미지 왼쪽) 중심
+        le_x, le_y = mid(362, 263)   # 왼쪽 눈 중심
+        no_x, no_y = pt(1)           # 코끝
+        rm_x, rm_y = pt(61)          # 오른쪽 입꼬리
+        lm_x, lm_y = pt(291)         # 왼쪽 입꼬리
+        # SFace(YuNet 형식) 얼굴 박스: [x,y,w,h, 눈·코·입 5점(x,y), 점수]
+        box = np.array([[x0, y0, bw, bh, re_x, re_y, le_x, le_y, no_x, no_y,
+                         rm_x, rm_y, lm_x, lm_y, 1.0]], dtype=np.float32)
+        aligned = face_recognizer.alignCrop(image, box)
+        feat = face_recognizer.feature(aligned)  # 1 x 128
+        return [round(float(v), 5) for v in feat.flatten()]
+    except Exception as e:
+        print("임베딩 추출 실패:", e)
+        return []
+
+
+def _embedding_cosine(a, b):
+    """두 임베딩의 코사인 유사도(1에 가까울수록 같은 사람). 비교 불가 시 None."""
+    if not a or not b or len(a) != len(b):
+        return None
+    va, vb = np.array(a, dtype=np.float32), np.array(b, dtype=np.float32)
+    na, nb = np.linalg.norm(va), np.linalg.norm(vb)
+    if na < 1e-6 or nb < 1e-6:
+        return None
+    return float(np.dot(va, vb) / (na * nb))
+
+
 def _log_detection(success, reason="", duration_ms=0):
     """얼굴 랜드마크 검출 시도 한 건을 측정용으로 기록합니다(성공률·처리 시간 baseline 산출)."""
     try:
@@ -1053,6 +1120,7 @@ def _detect_and_score(raw):
 
     skin = _compute_skin_tone(image, face, width, height)
     signature = _compute_signature(face, width, height)
+    embedding = _compute_embedding(image, face, width, height)  # 정식 얼굴 임베딩(동일인 판별)
     gender = _estimate_gender(image, face, width, height)
     age = _estimate_age(image, face, width, height)
     dc = _compute_dark_circles(image, face, width, height)
@@ -1068,6 +1136,7 @@ def _detect_and_score(raw):
         "scores": scores,
         "skin": skin,
         "signature": signature,
+        "embedding": embedding,      # 정식 얼굴 임베딩(동일인 판별용)
         "gender": gender,
         "age": age,                  # 추정 나이대(참고용)
         "dark_circle": dark_circle,  # 다크서클 점수(높을수록 양호)
@@ -1161,36 +1230,53 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
         return res  # 얼굴을 못 찾으면 저장하지 않음
 
     # 직전에 분석한 내 사진과 '같은 사람'인지 확인합니다.
-    # ① 얼굴 특징(signature) 거리 ② 추정 성별(보조) — 둘 중 하나라도 다르면 다른 사람으로 봅니다.
+    # 1순위: 정식 얼굴 임베딩(코사인 유사도) — 각도·표정·조명에 강함.
+    # 임베딩을 못 쓰면(옛 기록·추출 실패) 예전 방식(얼굴 비율 + 성별)으로 대체합니다.
     cur_gender = res.get("gender", "")
+    cur_emb = res.get("embedding") or []
     conn = db.connect()
     prev = conn.execute(
-        "SELECT signature, gender FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+        "SELECT signature, gender, embedding FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1",
         (user_id,),
     ).fetchone()
     conn.close()
     if prev:
         prev_sig_json, prev_gender = prev[0], prev[1]
-        # ① 얼굴 특징 비교
-        if prev_sig_json:
-            try:
-                prev_sig = json.loads(prev_sig_json)
-            except (ValueError, TypeError):
-                prev_sig = []
-            dist = _signature_distance(res["signature"], prev_sig)
-            if dist is not None and dist > SIG_THRESHOLD:
+        prev_emb_json = prev[2] if len(prev) > 2 else ""
+        try:
+            prev_emb = json.loads(prev_emb_json) if prev_emb_json else []
+        except (ValueError, TypeError):
+            prev_emb = []
+
+        cos = _embedding_cosine(cur_emb, prev_emb)
+        if cos is not None:
+            # ── 정식 임베딩 비교 (둘 다 있을 때) ──
+            if cos < EMB_THRESHOLD:
                 return {
                     "detected": False,
                     "different_person": True,
                     "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
                 }
-        # ② 성별 비교 (둘 다 추정됐고 서로 다를 때만)
-        if prev_gender and cur_gender and prev_gender != cur_gender:
-            return {
-                "detected": False,
-                "different_person": True,
-                "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
-            }
+        else:
+            # ── 대체: 얼굴 비율 + 성별 ──
+            if prev_sig_json:
+                try:
+                    prev_sig = json.loads(prev_sig_json)
+                except (ValueError, TypeError):
+                    prev_sig = []
+                dist = _signature_distance(res["signature"], prev_sig)
+                if dist is not None and dist > SIG_THRESHOLD:
+                    return {
+                        "detected": False,
+                        "different_person": True,
+                        "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
+                    }
+            if prev_gender and cur_gender and prev_gender != cur_gender:
+                return {
+                    "detected": False,
+                    "different_person": True,
+                    "message": "이전에 분석한 얼굴과 다른 사람으로 보입니다. 본인 얼굴 사진으로 다시 시도해 주세요.",
+                }
 
     # 사진 식별용 이름(실제 사진 데이터는 DB에 함께 저장합니다)
     filename = f"{uuid.uuid4().hex}.jpg"
@@ -1202,6 +1288,7 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     brightness = res["skin"]["brightness"]
     redness = res["skin"]["redness"]
     signature_json = json.dumps(res["signature"])
+    embedding_json = json.dumps(res.get("embedding") or [])
     age = res.get("age", "")
     dark_circle = res.get("dark_circle", 0)
     wrinkle = res.get("wrinkle", 0)
@@ -1211,10 +1298,10 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     conn = db.connect()
     cur = conn.execute(
         """
-        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, gender, age, dark_circle, wrinkle, basis, image_filename, user_id, image_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, embedding, gender, age, dark_circle, wrinkle, basis, image_filename, user_id, image_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
         """,
-        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, cur_gender, age, dark_circle, wrinkle, basis_json, filename, user_id, raw),
+        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, embedding_json, cur_gender, age, dark_circle, wrinkle, basis_json, filename, user_id, raw),
     )
     new_id = cur.fetchone()[0]
     conn.commit()
