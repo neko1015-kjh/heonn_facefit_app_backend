@@ -412,7 +412,7 @@
   <div class="section-title">🗓️ 배포 내역 <span class="section-note">(수정·배포된 버전 기록 — 최신순)</span></div>
   <div class="road-group">
     <h3 class="rg-done">📱 앱(APK) 버전</h3>
-    <div class="road-item done"><span class="ck">🛠️</span><span class="t"><b>v14</b> · 인앱 카메라 촬영 <span class="sub">앱 안에서 카메라 실행 + 얼굴 가이드 타원 + 실시간 안내(정면·위치) — 코드 완료, ⏳ APK는 EAS 무료 빌드 한도 리셋(7/1) 후 생성</span></span></div>
+    <div class="road-item done"><span class="ck">🛠️</span><span class="t"><b>v14</b> · 인앱 카메라 + 3D 각도 보정 <span class="sub">앱 내 카메라(얼굴 가이드·실시간 안내) + 3D 안면 스캔에 각도 보정 반영 — 코드 완료, ⏳ APK는 EAS 무료 빌드 한도 리셋(7/1) 후 생성</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v13</b> · 점수 근거값 표시 <span class="sub">스캔·리포트 점수마다 근거(좌우 폭 차이 5.9% 등) 표시 — 설치 가능한 최신</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v12</b> · 측정 보정 표시 <span class="sub">스캔 결과 보정 배지(정면·각도·조명) + 리포트 '측정 신뢰도' 카드</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v11</b> · 진짜 카카오 로그인 <span class="sub">인앱 브라우저로 실제 카카오 인증 → 앱 복귀 · 영구 계정 · 로그인도 콜드스타트 재시도</span></span></div>
@@ -428,7 +428,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">정식 얼굴 임베딩(SFace) 동일인 판별 <span class="sub">각도·표정에 강함(변형 유사도 0.98+) — 비율 방식 오탐 해결 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">3D 안면 스캔 각도 보정 반영 <span class="sub">기울여 찍어도 똑바로 선 얼굴로 3D 표시 — 갤러리 즉시 적용 / 앱은 다음 빌드 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">정식 얼굴 임베딩(SFace) 동일인 판별 <span class="sub">각도·표정에 강함(변형 유사도 0.98+) — 비율 방식 오탐 해결</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">주름 점수 안정화 <span class="sub">밝기 정규화+볼 기준 하한 — 재촬영 흔들림 std 5.0→3.4(변별력 유지)</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">부위별 처방(Zone) 정확도 평가셋 + /zone <span class="sub">케어 부위 지목 정확도 94%</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">검출률·정확도 평가셋 + /accuracy <span class="sub">검출 100%·거부 100%·대칭정확도 97.9</span></span></div>
