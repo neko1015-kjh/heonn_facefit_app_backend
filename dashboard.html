@@ -178,6 +178,11 @@
   .dlg-body p { margin-bottom: 11px; }
   .dlg-body b { color: var(--amber); }
   .dlg-body .num { color: var(--emerald); font-weight: 700; }
+  .dlg-hist { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border2); }
+  .dlg-hist h4 { color: var(--faint); font-size: 12px; font-weight: 700; letter-spacing: .5px; margin-bottom: 10px; }
+  .dlg-hist .hrow { display: flex; gap: 10px; margin-bottom: 9px; font-size: 12.5px; line-height: 1.5; }
+  .dlg-hist .hd { color: var(--amber); font-weight: 700; flex-shrink: 0; min-width: 46px; }
+  .dlg-hist .ht { color: var(--muted); }
 
   footer { text-align: center; color: var(--faint); font-size: 12px; margin-top: 36px; line-height: 1.7; }
 </style>
@@ -659,6 +664,51 @@
         + '<p><b>어떻게</b> — 부기·붉은기·밝기·비대칭 점수를 기준으로 알맞은 제품을 앞쪽에 배치해 최대 5개까지 골라 보여줘요.</p>' }
   };
 
+  // 항목별 변경 히스토리(시간순). 팝업 아래에 타임라인으로 보여줍니다.
+  var HISTORY = {
+    angle: [
+      { d: '06-25', t: '최초 구현 — 얼굴을 똑바로 세워(roll 보정) 점수 계산' },
+      { d: '06-25', t: '회전 방향(부호) 수정 — 검증서 오히려 나빠진 것 발견·교정(변동 52→2점)' },
+      { d: '06-26', t: '3D 안면 스캔·갤러리에도 각도 보정 반영' }
+    ],
+    light: [
+      { d: '06-25', t: '그레이월드+밝기정규화로 조명 영향 제거(밝기 std 30.8→12.1·붉은기 23.9→6.6)' },
+      { d: '06-25', t: '보정 후 밝기 스케일에 맞춰 톤 라벨·제품 추천 기준 조정' }
+    ],
+    ground: [{ d: '06-25', t: '임의 상수 → 측정값(%·배)+정상범위 기준점으로 점수 재설계, 근거값 표시' }],
+    repro: [{ d: '06-25', t: '반복 촬영 안정성 수치화 + /stability 페이지 배포' }],
+    acc: [{ d: '06-25', t: "정답 합성 평가셋으로 검출률·정확도 실측 + /accuracy 페이지" }],
+    zone: [{ d: '06-25', t: '한쪽 부풀려 정답 생성 → 케어 부위 지목 정확도 측정 + /zone 페이지' }],
+    perf: [
+      { d: '06-25', t: '사진 다운스케일(231→131ms)·검출 잠금·분석 스레드 오프로드' },
+      { d: '06-25', t: 'keep-alive(10분 핑)로 콜드스타트 완화' }
+    ],
+    wrinklestab: [
+      { d: '06-25', t: '1차 시도(블러·큰 패치) — 변별력이 0이 되는 실패 확인' },
+      { d: '06-25', t: '밝기 정규화+볼 기준 하한으로 해결(흔들림 std 5.0→3.4, 변별력 유지)' }
+    ],
+    sameperson: [
+      { d: '~초기', t: '얼굴 비율 9개 + 성별 휴리스틱으로 동일인 판별' },
+      { d: '06-26', t: '정식 얼굴 임베딩(SFace, 코사인 0.363)으로 교체 — 각도·표정에 강함' },
+      { d: '06-26', t: '오탐 수정 — 이전 사진 임베딩 재계산 + 비교 불가 시 차단 안 함' }
+    ],
+    gallery: [
+      { d: '06-22', t: '사진 클릭 → 3D 복원(점구름) 팝업' },
+      { d: '06-23', t: '분석 부위 보기 추가(비대칭·부기·다크서클·주름)' },
+      { d: '06-26', t: '3D 복원에 각도 보정 반영' }
+    ],
+    kakao: [
+      { d: '06-22', t: '웹 OAuth(리다이렉트) 방식' },
+      { d: '06-23', t: '앱 네이티브 OAuth(facefit://) + 콜드스타트 재시도 — "연결 실패" 해결' }
+    ],
+    wrinkleage: [{ d: '06-23', t: '주름·다크서클·나이 추정 추가(앱·갤러리 표시)' }],
+    quality: [{ d: '06-25', t: '스캔 결과 보정 배지 + 리포트 측정 신뢰도 카드(앱 v12)' }],
+    pose: [{ d: '06-22', t: '머리 각도 측정 + 정면 게이팅(고개 돌아간 사진 거르기)' }],
+    upload: [{ d: '06-22', t: 'Expo uploadAsync로 교체 — APK 분석 실패 근본 해결' }],
+    coldstart: [{ d: '06-22', t: '서버 깨우기 대기 + 분석 자동 재시도' }],
+    loginhist: [{ d: '06-23', t: '로그인 계정 히스토리 페이지(/logins) 추가' }]
+  };
+
   function findDetailKey(t) {
     for (var k in DETAILS) {
       var m = DETAILS[k].match;
@@ -671,7 +721,16 @@
     mockIdx = -1; // 개발내용 팝업에서는 스와이프 비활성
     document.getElementById('dlgtag').textContent = '✅ 완료 · 개발 내용';
     document.getElementById('dlgtitle').textContent = d.title;
-    document.getElementById('dlgbody').innerHTML = d.body;
+    var html = d.body;
+    var h = HISTORY[key];
+    if (h && h.length) {
+      var rows = '';
+      for (var i = 0; i < h.length; i++) {
+        rows += '<div class="hrow"><span class="hd">' + h[i].d + '</span><span class="ht">' + h[i].t + '</span></div>';
+      }
+      html += '<div class="dlg-hist"><h4>📍 변경 히스토리</h4>' + rows + '</div>';
+    }
+    document.getElementById('dlgbody').innerHTML = html;
     document.getElementById('dlgov').classList.add('show');
   }
   function closeDlg() { mockIdx = -1; document.getElementById('dlgov').classList.remove('show'); }
