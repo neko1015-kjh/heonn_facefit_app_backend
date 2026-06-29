@@ -381,9 +381,9 @@
   <div class="section-title">🛡️ 예외 처리·안정성 보강 <span class="section-note">(점검 완료 · 2026-06-22)</span></div>
   <div class="road-group">
     <h3 class="rg-todo">백엔드 (우선순위순)</h3>
-    <div class="road-item"><span class="ck">🔴</span><span class="t">DB 연결 안전 처리 (최우선) <span class="sub">save_scan·history·gallery·recommendations·metrics·uploads를 try/finally로 — DB 끊김 시 500·연결 누수 방지(Neon 한도 초과 예방)</span></span></div>
-    <div class="road-item"><span class="ck">🟠</span><span class="t">분석(mediapipe/OpenCV) 예외 처리 <span class="sub">이상 이미지에도 500 대신 친절한 안내 반환</span></span></div>
-    <div class="road-item"><span class="ck">🟡</span><span class="t">전역 예외 핸들러 추가 <span class="sub">예상 못한 오류 시 스택트레이스 대신 안내 JSON</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">DB 연결 안전 처리 (최우선) <span class="sub">모든 반복 호출 엔드포인트를 with(자동 닫기)로 전환 — 오류 나도 연결 누수 없음(Neon 한도 초과 예방) — 배포</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">전역 예외 핸들러 추가 <span class="sub">예상 못한 오류 시 스택트레이스 대신 친절한 안내 JSON — 배포</span></span></div>
+    <div class="road-item"><span class="ck">🟠</span><span class="t">분석(mediapipe/OpenCV) 예외 처리 <span class="sub">이상 이미지에도 친절한 안내 반환(전역 핸들러로 1차 커버됨)</span></span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">추천 제품 이미지 외부 URL(unsplash) 대체 처리 <span class="sub">회사망 차단 시 대체 이미지 표시</span></span></div>
   </div>
   <div class="road-group">
@@ -457,6 +457,7 @@
 
   <div class="section-title">🔧 수정·보완 내역 <span class="section-note">(버그 수정·개선 기록 — 최신순, 계속 추가)</span></div>
   <div class="road-group">
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · DB 연결 안전 처리 + 전역 예외 핸들러 <span class="sub">모든 엔드포인트 with(자동 닫기) 전환 — 연결 누수 방지 / 예상 못한 오류도 친절한 안내</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · 동일인 판별 오탐 수정 <span class="sub">이전 사진 임베딩을 즉석 재계산 + 임베딩 비교 불가 시 차단 안 함 → 같은 사람을 '다른 사람'으로 막던 문제 해결</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · 3D 안면 스캔·갤러리 각도 보정 반영 <span class="sub">기울여 찍어도 똑바로 선 얼굴로 3D 표시</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-25</b> · 조명 보정에 맞춰 톤 라벨·제품 추천 기준 조정 <span class="sub">보정 후 밝기 스케일 변화 반영</span></span></div>
