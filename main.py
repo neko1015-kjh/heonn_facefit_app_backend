@@ -1970,6 +1970,161 @@ def zone_page(refresh: int = 0):
     return html
 
 
+# ─────────────────────────────────────────────────────────────
+# AI 정확도 검증 — 위 평가들(재현성·정확도·Zone)에 '동일인 인식률'을 더해 한 페이지로 종합. ("/validation")
+# ─────────────────────────────────────────────────────────────
+_IDENTITY_CACHE = None
+_VALIDATION_CACHE = None
+
+
+def _detect_face(img):
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    r = _safe_detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+    return r.face_landmarks[0] if r.face_landmarks else None
+
+
+def _run_identity_eval(sample_n=5):
+    """동일인 인식률: 같은 얼굴을 재촬영(변형)했을 때 '같은 사람'으로 인식하는 비율(정답=같은 사람)."""
+    conn_rows = None
+    with db.connect() as conn:
+        conn_rows = conn.execute(
+            "SELECT image_data FROM scans WHERE image_data IS NOT NULL ORDER BY id DESC LIMIT ?",
+            (sample_n,),
+        ).fetchall()
+    total = matched = 0
+    min_cos = 1.0
+    for row in conn_rows:
+        if row[0] is None:
+            continue
+        base = _downscale_for_analysis(cv2.imdecode(np.frombuffer(bytes(row[0]), np.uint8), cv2.IMREAD_COLOR))
+        if base is None:
+            continue
+        f0 = _detect_face(base)
+        if f0 is None:
+            continue
+        h, w = base.shape[:2]
+        emb0 = _compute_embedding(base, f0, w, h)
+        if not emb0:
+            continue
+        for v in _REPRO_VARIATIONS[1:6]:
+            img = _perturb_image(base, *v)
+            f = _detect_face(img)
+            if f is None:
+                continue
+            hh, ww = img.shape[:2]
+            emb = _compute_embedding(img, f, ww, hh)
+            cos = _embedding_cosine(emb0, emb)
+            if cos is None:
+                continue
+            total += 1
+            if cos >= EMB_THRESHOLD:
+                matched += 1
+            min_cos = min(min_cos, cos)
+    return {
+        "pairs": total,
+        "matched": matched,
+        "recall": round(100 * matched / total) if total else 0,
+        "min_cos": round(min_cos, 3) if total else 0,
+    }
+
+
+# AI 정확도 검증 종합 리포트 페이지 ("/validation")
+@app.get("/validation", response_class=HTMLResponse)
+def validation_page(refresh: int = 0):
+    global _REPRO_CACHE, _ACC_CACHE, _ZONE_CACHE, _IDENTITY_CACHE
+    try:
+        if _ACC_CACHE is None or refresh:
+            _ACC_CACHE = _run_accuracy_eval(sample_n=6)
+        if _REPRO_CACHE is None or refresh:
+            _REPRO_CACHE = _run_reproducibility(sample_n=5)
+        if _ZONE_CACHE is None or refresh:
+            _ZONE_CACHE = _run_zone_eval(sample_n=6)
+        if _IDENTITY_CACHE is None or refresh:
+            _IDENTITY_CACHE = _run_identity_eval(sample_n=5)
+    except Exception as e:
+        print("종합 검증 실패:", e)
+        return "<h1>검증 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.</h1>"
+    acc, rep, zone, ident = _ACC_CACHE, _REPRO_CACHE, _ZONE_CACHE, _IDENTITY_CACHE
+
+    # 실사용 지표(DB) — 검출 성공률·평균 처리시간
+    with db.connect() as conn:
+        d_total = conn.execute("SELECT COUNT(*) FROM detections").fetchone()[0] or 0
+        d_ok = conn.execute("SELECT COUNT(*) FROM detections WHERE success = 1").fetchone()[0] or 0
+        lat = conn.execute("SELECT AVG(duration_ms) FROM detections WHERE success = 1 AND duration_ms > 0").fetchone()[0]
+    live_rate = round(100 * d_ok / d_total) if d_total else 0
+    avg_ms = round(float(lat)) if lat else 0
+    repro_scores = [m["score"] for m in rep["metrics"]]
+    repro_avg = round(sum(repro_scores) / len(repro_scores)) if repro_scores else 0
+
+    # 종합 신뢰도(핵심 지표 평균)
+    overall = round((acc["det_rate"] + acc["rej_rate"] + acc["sym_acc"] + acc["bal_acc"]
+                     + zone["acc"] + ident["recall"] + repro_avg) / 7)
+
+    def g(v, good=95, ok=85):
+        return ("우수", "g-ok") if v >= good else ("양호", "g-warn") if v >= ok else ("개선 필요", "g-bad")
+
+    rows = [
+        ("얼굴 검출 (합성 평가셋)", f"{acc['det_rate']}%", g(acc['det_rate'])),
+        ("비얼굴 거부 (오검출 방지)", f"{acc['rej_rate']}%", g(acc['rej_rate'])),
+        ("대칭 정확도 (완벽대칭=100)", f"{acc['sym_acc']}점 (오차 {acc['sym_err']})", g(acc['sym_acc'], 95, 88)),
+        ("부기 정확도 (완벽대칭=100)", f"{acc['bal_acc']}점 (오차 {acc['bal_err']})", g(acc['bal_acc'], 95, 88)),
+        ("부위 처방(Zone) 정확도", f"{zone['acc']}%", g(zone['acc'], 90, 75)),
+        ("동일인 인식률 (같은 사람)", f"{ident['recall']}% (최저 cos {ident['min_cos']})", g(ident['recall'], 95, 85)),
+        ("재현성 (반복 촬영 안정성)", f"평균 {repro_avg}점", g(repro_avg, 95, 85)),
+        ("실사용 검출 성공률", f"{live_rate}% ({d_ok}/{d_total})", g(live_rate, 90, 75)),
+        ("평균 처리 시간", f"{avg_ms}ms / 장", ("우수", "g-ok") if 0 < avg_ms <= 400 else ("양호", "g-warn")),
+    ]
+    body = ""
+    for name, val, (gr, gc) in rows:
+        body += (f'<tr><td>{name}</td><td class="v">{val}</td>'
+                 f'<td><span class="sbadge {gc}">{gr}</span></td></tr>')
+
+    og = g(overall, 92, 80)
+    html = """<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>HeOnn FaceFit — AI 정확도 검증 리포트</title>
+<style>
+  body { margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px 16px 60px; }
+  .wrap { max-width:720px; margin:0 auto; }
+  .back { display:inline-block; margin-bottom:16px; color:#fbbf24; text-decoration:none; font-size:13px; }
+  h1 { color:#fbbf24; font-size:22px; text-align:center; margin-bottom:4px; }
+  .sub { color:#a1a1aa; font-size:13px; text-align:center; line-height:1.6; margin-bottom:18px; }
+  .overall { background:linear-gradient(135deg,rgba(52,211,153,.14),rgba(52,211,153,.04)); border:1px solid rgba(52,211,153,.4); border-radius:18px; padding:22px; text-align:center; margin-bottom:18px; }
+  .overall .v { color:#34d399; font-size:46px; font-weight:800; }
+  .overall .l { color:#a1a1aa; font-size:13px; margin-top:4px; }
+  .badge { display:inline-block; font-size:12px; font-weight:700; padding:4px 12px; border-radius:999px; margin-top:8px; }
+  table { width:100%; border-collapse:collapse; background:#18181b; border-radius:14px; overflow:hidden; font-size:13px; }
+  th, td { padding:12px 14px; text-align:left; border-bottom:1px solid #27272a; }
+  th { background:#1f1f23; color:#fbbf24; font-size:12px; }
+  td.v { color:#f4f4f5; font-weight:600; font-variant-numeric:tabular-nums; }
+  tr:last-child td { border-bottom:none; }
+  .sbadge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }
+  .g-ok { background:rgba(52,211,153,.15); color:#34d399; }
+  .g-warn { background:rgba(251,191,36,.15); color:#fbbf24; }
+  .g-bad { background:rgba(248,113,113,.15); color:#f87171; }
+  .how { background:#18181b; border:1px solid #27272a; border-radius:14px; padding:16px; margin-top:18px; color:#a1a1aa; font-size:13px; line-height:1.7; }
+  .how b { color:#fbbf24; } .how a { color:#60a5fa; }
+  .refresh { display:inline-block; margin-top:16px; color:#a1a1aa; border:1px solid #3f3f46; border-radius:8px; padding:7px 14px; font-size:12px; text-decoration:none; }
+  .refresh:hover { color:#fbbf24; border-color:#fbbf24; }
+</style></head><body><div class="wrap">
+<a class="back" href="/dashboard">← 대시보드로</a>
+<h1>AI 정확도 검증 리포트</h1>
+<div class="sub">'정답을 만들 수 있는' 합성 평가셋 + 실사용 지표로 엔진을 종합 점검한 결과예요.</div>
+<div class="overall"><div class="v">__OVERALL__점</div><div class="l">종합 신뢰도 (핵심 지표 평균)</div>
+<div class="badge __OGC__">__OG__</div></div>
+<table><thead><tr><th>검증 항목</th><th>결과</th><th>등급</th></tr></thead><tbody>__ROWS__</tbody></table>
+<div class="how">
+  <b>측정 방법</b> — 검출/거부·대칭·부기·Zone·동일인은 <b>정답을 아는 합성 데이터</b>(거울 대칭=100점, 한쪽 부풀림=그쪽 케어, 재촬영 변형=같은 사람)로 실측했어요. 검출 성공률·처리 시간은 <b>실제 사용 기록(DB)</b> 기반입니다.<br/>
+  세부는 <a href="/accuracy">/accuracy</a> · <a href="/stability">/stability</a> · <a href="/zone">/zone</a> 에서 볼 수 있어요.<br/><br/>
+  ※ 의료용 라벨 데이터가 아닌 합성 평가셋입니다. 사람이 라벨링한 실제 데이터로 표본을 늘리면 더 정밀해집니다.
+</div>
+<a class="refresh" href="/validation?refresh=1">다시 검증</a>
+</div></body></html>"""
+    html = (html.replace("__OVERALL__", str(overall)).replace("__OG__", og[0])
+            .replace("__OGC__", og[1]).replace("__ROWS__", body))
+    return html
+
+
 # 분석 사진 갤러리 페이지 — 저장된 분석 사진을 모아 봅니다. ("/gallery")
 @app.get("/gallery", response_class=HTMLResponse)
 def gallery():
