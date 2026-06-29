@@ -1099,20 +1099,39 @@ def _log_detection(success, reason="", duration_ms=0):
         pass
 
 
+def _safe(label, fn, default):
+    """선택 분석 항목 하나가 이상 이미지에서 오류가 나도, 기본값으로 대체하고 전체 분석은 계속합니다."""
+    try:
+        return fn()
+    except Exception as e:
+        print(f"분석 항목 '{label}' 실패(기본값 사용): {e!r}")
+        return default
+
+
 def _detect_and_score(raw):
     """사진 데이터(raw)를 받아 얼굴을 검출하고 점수·피부톤을 계산합니다."""
     # 처리 시간 측정 시작 (사진 1장 분석에 걸리는 시간 = fps 대체 지표)
     t0 = time.perf_counter()
-    image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    try:
+        image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    except Exception as e:
+        print("이미지 디코드 오류:", e)
+        image = None
     if image is None:
         # 이미지 자체를 못 읽은 경우는 '검출 대상'이 아니므로 측정에서 제외합니다.
         return {"detected": False, "message": "이미지를 읽을 수 없습니다. 올바른 사진 파일인지 확인해 주세요."}
 
-    image = _downscale_for_analysis(image)  # 큰 사진은 줄여서 빠르게 분석
-    height, width = image.shape[:2]
-    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
-    result = _safe_detect(mp_image)
+    try:
+        image = _downscale_for_analysis(image)  # 큰 사진은 줄여서 빠르게 분석
+        height, width = image.shape[:2]
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+        result = _safe_detect(mp_image)
+    except Exception as e:
+        # 이상 이미지로 검출 자체가 실패해도 서버는 죽지 않고 안내만 반환
+        print("얼굴 검출 단계 오류:", e)
+        _log_detection(False, "검출 오류")
+        return {"detected": False, "message": "사진을 분석하지 못했어요. 정면 얼굴이 잘 보이는 다른 사진으로 다시 시도해 주세요."}
     elapsed_ms = (time.perf_counter() - t0) * 1000  # 검출까지 걸린 시간(ms)
     if not result.face_landmarks:
         # 얼굴 랜드마크를 찾지 못함 → 검출 실패로 기록
@@ -1133,24 +1152,26 @@ def _detect_and_score(raw):
 
     # 머리 각도(포즈) 검사: 고개가 옆/위아래로 많이 돌아가면 좌우 폭이 왜곡돼 점수가 부정확해집니다.
     # 정면이 아닐 경우 다시 촬영하도록 안내해, 매번 같은 조건에서 측정되게 합니다(일관성↑).
-    pose = _estimate_head_pose(result)
+    pose = _safe("pose", lambda: _estimate_head_pose(result), None)
     if pose is not None and (abs(pose["yaw"]) > MAX_YAW or abs(pose["pitch"]) > MAX_PITCH):
         return {
             "detected": False,
             "message": "고개가 옆이나 위아래로 돌아갔어요. 카메라를 정면으로 바라보고 다시 촬영해 주세요.",
         }
 
-    scores = _compute_scores(face, width, height)
+    # 핵심 점수(비대칭·부기)는 필수 — 실패하면 분석을 중단하고 안내합니다.
+    scores = _safe("scores", lambda: _compute_scores(face, width, height), None)
     if scores is None:
         return {"detected": False, "message": "얼굴이 정확히 인식되지 않았어요. 정면 얼굴이 잘 보이는 사진으로 다시 시도해 주세요."}
 
-    skin = _compute_skin_tone(image, face, width, height)
-    signature = _compute_signature(face, width, height)
-    embedding = _compute_embedding(image, face, width, height)  # 정식 얼굴 임베딩(동일인 판별)
-    gender = _estimate_gender(image, face, width, height)
-    age = _estimate_age(image, face, width, height)
-    dc = _compute_dark_circles(image, face, width, height)
-    wr = _compute_wrinkles(image, face, width, height)
+    # 선택 항목들은 이상 이미지에서 하나가 실패해도 기본값으로 대체하고 나머지는 정상 반환(부분 실패 허용).
+    skin = _safe("skin", lambda: _compute_skin_tone(image, face, width, height), {"brightness": 0, "redness": 0})
+    signature = _safe("signature", lambda: _compute_signature(face, width, height), [])
+    embedding = _safe("embedding", lambda: _compute_embedding(image, face, width, height), [])  # 정식 얼굴 임베딩
+    gender = _safe("gender", lambda: _estimate_gender(image, face, width, height), "")
+    age = _safe("age", lambda: _estimate_age(image, face, width, height), "")
+    dc = _safe("dark_circle", lambda: _compute_dark_circles(image, face, width, height), {"score": 0, "basis": "측정 불가"})
+    wr = _safe("wrinkle", lambda: _compute_wrinkles(image, face, width, height), {"score": 0, "basis": "측정 불가"})
     dark_circle = dc["score"]
     wrinkle = wr["score"]
     # 화면 표시용 좌표. x, y는 0~1 비율, z는 상대 깊이(간이 3D 표시에 사용).
