@@ -45,6 +45,18 @@ class _ConnWrapper:
     def close(self):
         self._raw.close()
 
+    # with 문 지원: 블록을 벗어나면(정상·오류 모두) 연결을 자동으로 닫습니다.
+    # (오류가 나도 연결이 새지 않게 — Neon 연결 수 초과 방지)
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            self.close()
+        except Exception:
+            pass
+        return False  # 예외는 그대로 전달
+
 
 def connect():
     """현재 환경에 맞는 DB 연결을 돌려줍니다."""

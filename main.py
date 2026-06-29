@@ -20,12 +20,23 @@ import numpy as np
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
-from fastapi import FastAPI, UploadFile, File, Header
+from fastapi import FastAPI, UploadFile, File, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, Response, HTMLResponse
+from fastapi.responses import RedirectResponse, Response, HTMLResponse, JSONResponse
 
 # FastAPI 앱(서버)을 만듭니다.
 app = FastAPI(title="FaceFit API")
+
+
+# [예외 강화] 어떤 요청에서 예상 못한 오류가 나도 서버가 죽거나 스택트레이스를 노출하지 않고,
+# 친절한 안내(JSON)를 돌려줍니다. (개별 처리에서 못 잡은 오류의 마지막 안전망)
+@app.exception_handler(Exception)
+async def _unhandled_exception(request: Request, exc: Exception):
+    print(f"처리되지 않은 오류 [{request.url.path}]: {exc!r}")
+    return JSONResponse(
+        status_code=200,
+        content={"detected": False, "message": "잠시 문제가 생겼어요. 잠시 후 다시 시도해 주세요."},
+    )
 
 # CORS 설정입니다.
 # 웹 브라우저 미리보기(localhost:8081)에서 이 서버(localhost:8000)로
@@ -393,9 +404,8 @@ def _current_user_id(authorization: str | None):
     token = authorization.replace("Bearer ", "").strip()
     if not token:
         return None
-    conn = db.connect()
-    row = conn.execute("SELECT id FROM users WHERE token = ?", (token,)).fetchone()
-    conn.close()
+    with db.connect() as conn:
+        row = conn.execute("SELECT id FROM users WHERE token = ?", (token,)).fetchone()
     return row[0] if row else None
 
 
@@ -406,15 +416,14 @@ def auth_login(payload: dict):
     name = (payload or {}).get("name") or f"{provider} 사용자"
     token = uuid.uuid4().hex
     created_at = datetime.now().isoformat(timespec="seconds")
-    conn = db.connect()
     # RETURNING id 는 SQLite(3.35+)와 PostgreSQL 양쪽에서 새 id를 돌려줍니다.
-    cur = conn.execute(
-        "INSERT INTO users (token, provider, display_name, created_at) VALUES (?, ?, ?, ?) RETURNING id",
-        (token, provider, name, created_at),
-    )
-    uid = cur.fetchone()[0]
-    conn.commit()
-    conn.close()
+    with db.connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO users (token, provider, display_name, created_at) VALUES (?, ?, ?, ?) RETURNING id",
+            (token, provider, name, created_at),
+        )
+        uid = cur.fetchone()[0]
+        conn.commit()
     # 새 계정은 아직 동의 전(consented=False)
     return {"token": token, "user": {"id": uid, "provider": provider, "display_name": name, "consented": False}}
 
@@ -513,20 +522,19 @@ def kakao_callback(code: str = "", state: str = "web"):
             return RedirectResponse(_oauth_redirect(state))
 
         # 3) 같은 카카오 계정이면 기존 사용자 재사용, 없으면 새로 생성
-        conn = db.connect()
-        row = conn.execute(
-            "SELECT token FROM users WHERE provider = 'kakao' AND provider_id = ?", (kakao_id,)
-        ).fetchone()
-        if row:
-            token = row[0]
-        else:
-            token = uuid.uuid4().hex
-            conn.execute(
-                "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
-                (token, "kakao", kakao_id, nickname, datetime.now().isoformat(timespec="seconds")),
-            )
-            conn.commit()
-        conn.close()
+        with db.connect() as conn:
+            row = conn.execute(
+                "SELECT token FROM users WHERE provider = 'kakao' AND provider_id = ?", (kakao_id,)
+            ).fetchone()
+            if row:
+                token = row[0]
+            else:
+                token = uuid.uuid4().hex
+                conn.execute(
+                    "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (token, "kakao", kakao_id, nickname, datetime.now().isoformat(timespec="seconds")),
+                )
+                conn.commit()
 
         # 4) 웹/앱으로 토큰 전달 (프론트가 URL의 token을 읽어 로그인 처리)
         return RedirectResponse(_oauth_redirect(state, token))
@@ -588,20 +596,19 @@ def google_callback(code: str = ""):
             return RedirectResponse(f"{WEB_URL}/?login_error=1")
 
         # 3) 같은 구글 계정이면 기존 사용자 재사용, 없으면 새로 생성
-        conn = db.connect()
-        row = conn.execute(
-            "SELECT token FROM users WHERE provider = 'google' AND provider_id = ?", (google_id,)
-        ).fetchone()
-        if row:
-            token = row[0]
-        else:
-            token = uuid.uuid4().hex
-            conn.execute(
-                "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
-                (token, "google", google_id, name, datetime.now().isoformat(timespec="seconds")),
-            )
-            conn.commit()
-        conn.close()
+        with db.connect() as conn:
+            row = conn.execute(
+                "SELECT token FROM users WHERE provider = 'google' AND provider_id = ?", (google_id,)
+            ).fetchone()
+            if row:
+                token = row[0]
+            else:
+                token = uuid.uuid4().hex
+                conn.execute(
+                    "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (token, "google", google_id, name, datetime.now().isoformat(timespec="seconds")),
+                )
+                conn.commit()
 
         return RedirectResponse(f"{WEB_URL}/?token={token}")
     except urllib.error.HTTPError as he:
@@ -622,11 +629,10 @@ def auth_me(authorization: str = Header(None)):
     if not authorization:
         return {"authenticated": False}
     token = authorization.replace("Bearer ", "").strip()
-    conn = db.connect()
-    row = conn.execute(
-        "SELECT id, provider, display_name, consent_at FROM users WHERE token = ?", (token,)
-    ).fetchone()
-    conn.close()
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT id, provider, display_name, consent_at FROM users WHERE token = ?", (token,)
+        ).fetchone()
     if not row:
         return {"authenticated": False}
     consented = bool(row[3])  # 동의 시각이 있으면 동의 완료
@@ -1082,13 +1088,12 @@ def _embedding_cosine(a, b):
 def _log_detection(success, reason="", duration_ms=0):
     """얼굴 랜드마크 검출 시도 한 건을 측정용으로 기록합니다(성공률·처리 시간 baseline 산출)."""
     try:
-        conn = db.connect()
-        conn.execute(
-            "INSERT INTO detections (created_at, success, reason, duration_ms) VALUES (?, ?, ?, ?)",
-            (datetime.now().isoformat(timespec="seconds"), 1 if success else 0, reason, int(duration_ms)),
-        )
-        conn.commit()
-        conn.close()
+        with db.connect() as conn:
+            conn.execute(
+                "INSERT INTO detections (created_at, success, reason, duration_ms) VALUES (?, ?, ?, ?)",
+                (datetime.now().isoformat(timespec="seconds"), 1 if success else 0, reason, int(duration_ms)),
+            )
+            conn.commit()
     except Exception:
         # 측정 기록 실패는 분석 자체를 막지 않도록 조용히 넘어갑니다.
         pass
@@ -1254,12 +1259,11 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     # 임베딩은 각도·표정·조명에 강해, 같은 사람을 '다른 사람'으로 오탐하던 문제를 막습니다.
     cur_gender = res.get("gender", "")
     cur_emb = res.get("embedding") or []
-    conn = db.connect()
-    prev = conn.execute(
-        "SELECT embedding, image_data FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1",
-        (user_id,),
-    ).fetchone()
-    conn.close()
+    with db.connect() as conn:
+        prev = conn.execute(
+            "SELECT embedding, image_data FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
     if prev:
         try:
             prev_emb = json.loads(prev[0]) if prev[0] else []
@@ -1296,17 +1300,16 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     basis_json = json.dumps(res.get("basis") or {}, ensure_ascii=False)
 
     # 데이터베이스에 기록 + 사진 바이너리를 함께 저장합니다. (재시작해도 사진 유지)
-    conn = db.connect()
-    cur = conn.execute(
-        """
-        INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, embedding, gender, age, dark_circle, wrinkle, basis, image_filename, user_id, image_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
-        """,
-        (created_at, symmetry, balance, brightness, redness, care_side, signature_json, embedding_json, cur_gender, age, dark_circle, wrinkle, basis_json, filename, user_id, raw),
-    )
-    new_id = cur.fetchone()[0]
-    conn.commit()
-    conn.close()
+    with db.connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, embedding, gender, age, dark_circle, wrinkle, basis, image_filename, user_id, image_data)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+            """,
+            (created_at, symmetry, balance, brightness, redness, care_side, signature_json, embedding_json, cur_gender, age, dark_circle, wrinkle, basis_json, filename, user_id, raw),
+        )
+        new_id = cur.fetchone()[0]
+        conn.commit()
 
     # (이미지 서빙 라우트는 아래 get_uploaded_image 에서 처리)
     return {
@@ -1970,17 +1973,16 @@ def zone_page(refresh: int = 0):
 # 분석 사진 갤러리 페이지 — 저장된 분석 사진을 모아 봅니다. ("/gallery")
 @app.get("/gallery", response_class=HTMLResponse)
 def gallery():
-    conn = db.connect()
-    rows = conn.execute(
-        """
-        SELECT s.id, s.created_at, s.image_filename, s.symmetry, s.balance, s.gender,
-               s.age, s.dark_circle, s.wrinkle, u.display_name
-        FROM scans s LEFT JOIN users u ON s.user_id = u.id
-        WHERE s.image_data IS NOT NULL
-        ORDER BY s.id DESC LIMIT 200
-        """
-    ).fetchall()
-    conn.close()
+    with db.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT s.id, s.created_at, s.image_filename, s.symmetry, s.balance, s.gender,
+                   s.age, s.dark_circle, s.wrinkle, u.display_name
+            FROM scans s LEFT JOIN users u ON s.user_id = u.id
+            WHERE s.image_data IS NOT NULL
+            ORDER BY s.id DESC LIMIT 200
+            """
+        ).fetchall()
 
     def esc(s):
         # HTML 속성/본문에 안전하게 넣기 위한 최소 이스케이프
@@ -2270,11 +2272,10 @@ def scan_landmarks(scan_id: int):
 # 저장된 사진을 DB에서 읽어 돌려줍니다. ("/uploads/{파일명}")
 @app.get("/uploads/{filename}")
 def get_uploaded_image(filename: str):
-    conn = db.connect()
-    row = conn.execute(
-        "SELECT image_data FROM scans WHERE image_filename = ?", (filename,)
-    ).fetchone()
-    conn.close()
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT image_data FROM scans WHERE image_filename = ?", (filename,)
+        ).fetchone()
     if not row or row[0] is None:
         return Response(status_code=404)
     return Response(content=bytes(row[0]), media_type="image/jpeg")
@@ -2286,15 +2287,14 @@ def get_history(authorization: str = Header(None)):
     user_id = _current_user_id(authorization)
     if not user_id:
         return {"count": 0, "records": []}
-    conn = db.connect()
-    rows = conn.execute(
-        """
-        SELECT id, created_at, symmetry, balance, image_filename, care_side, signature, dark_circle, wrinkle, age, basis
-        FROM scans WHERE user_id = ? ORDER BY id DESC
-        """,
-        (user_id,),
-    ).fetchall()
-    conn.close()
+    with db.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, created_at, symmetry, balance, image_filename, care_side, signature, dark_circle, wrinkle, age, basis
+            FROM scans WHERE user_id = ? ORDER BY id DESC
+            """,
+            (user_id,),
+        ).fetchall()
     records = [_record_dict(*row) for row in rows]
     return {"count": len(records), "records": records}
 
@@ -2388,15 +2388,14 @@ def get_recommendations(authorization: str = Header(None)):
     user_id = _current_user_id(authorization)
     row = None
     if user_id:
-        conn = db.connect()
-        row = conn.execute(
-            """
-            SELECT symmetry, balance, skin_brightness, skin_redness
-            FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1
-            """,
-            (user_id,),
-        ).fetchone()
-        conn.close()
+        with db.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT symmetry, balance, skin_brightness, skin_redness
+                FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1
+                """,
+                (user_id,),
+            ).fetchone()
 
     # 아직 분석 기록이 없으면 기본 추천(전체 제품)을 돌려줍니다.
     if row is None:
@@ -2429,10 +2428,9 @@ def get_recommendations(authorization: str = Header(None)):
 # ─────────────────────────────────────────────────────────────
 @app.get("/metrics/landmark")
 def landmark_metrics():
-    conn = db.connect()
-    total = conn.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
-    success = conn.execute("SELECT COUNT(*) FROM detections WHERE success = 1").fetchone()[0]
-    conn.close()
+    with db.connect() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
+        success = conn.execute("SELECT COUNT(*) FROM detections WHERE success = 1").fetchone()[0]
     # 측정 기록이 하나도 없으면 0%로 표시합니다(아직 분석한 사진이 없음).
     success_rate = round(success / total * 100, 1) if total else 0.0
     return {
@@ -2450,12 +2448,11 @@ def landmark_metrics():
 # ─────────────────────────────────────────────────────────────
 @app.get("/metrics/retention")
 def retention_metrics():
-    conn = db.connect()
     # 로그인 사용자(user_id > 0)별 분석 횟수를 셉니다. (레거시 0번 기록은 제외)
-    rows = conn.execute(
-        "SELECT user_id, COUNT(*) FROM scans WHERE user_id > 0 GROUP BY user_id"
-    ).fetchall()
-    conn.close()
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT user_id, COUNT(*) FROM scans WHERE user_id > 0 GROUP BY user_id"
+        ).fetchall()
     active_users = len(rows)  # 분석을 1회 이상 한 사용자 수
     returning_users = sum(1 for _, cnt in rows if cnt >= 2)  # 2회 이상 분석한 사용자 수
     # 활성 사용자가 없으면 0%로 표시합니다.
@@ -2473,13 +2470,12 @@ def retention_metrics():
 def submit_feedback(payload: dict, authorization: str = Header(None)):
     user_id = _current_user_id(authorization) or 0
     satisfied = 1 if (payload or {}).get("satisfied") else 0
-    conn = db.connect()
-    conn.execute(
-        "INSERT INTO feedback (created_at, user_id, satisfied) VALUES (?, ?, ?)",
-        (datetime.now().isoformat(timespec="seconds"), user_id, satisfied),
-    )
-    conn.commit()
-    conn.close()
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO feedback (created_at, user_id, satisfied) VALUES (?, ?, ?)",
+            (datetime.now().isoformat(timespec="seconds"), user_id, satisfied),
+        )
+        conn.commit()
     return {"ok": True}
 
 
@@ -2489,10 +2485,9 @@ def submit_feedback(payload: dict, authorization: str = Header(None)):
 # ─────────────────────────────────────────────────────────────
 @app.get("/metrics/csat")
 def csat_metrics():
-    conn = db.connect()
-    total = conn.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]
-    satisfied = conn.execute("SELECT COUNT(*) FROM feedback WHERE satisfied = 1").fetchone()[0]
-    conn.close()
+    with db.connect() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]
+        satisfied = conn.execute("SELECT COUNT(*) FROM feedback WHERE satisfied = 1").fetchone()[0]
     # 평가가 하나도 없으면 0%로 표시합니다.
     csat = round(satisfied / total * 100, 1) if total else 0.0
     return {
@@ -2509,11 +2504,10 @@ def csat_metrics():
 # ─────────────────────────────────────────────────────────────
 @app.get("/metrics/latency")
 def latency_metrics():
-    conn = db.connect()
-    row = conn.execute(
-        "SELECT COUNT(*), AVG(duration_ms) FROM detections WHERE success = 1 AND duration_ms > 0"
-    ).fetchone()
-    conn.close()
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*), AVG(duration_ms) FROM detections WHERE success = 1 AND duration_ms > 0"
+        ).fetchone()
     count = row[0] or 0
     # PostgreSQL의 AVG는 Decimal을 돌려주므로 float으로 변환해 통일합니다.
     avg_ms = round(float(row[1]), 1) if row[1] else 0.0
