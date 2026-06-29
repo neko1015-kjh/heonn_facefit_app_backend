@@ -167,6 +167,23 @@
   .mockdots b { width: 7px; height: 7px; border-radius: 50%; background: #3a3a40; transition: width .15s, background .15s; }
   .mockdots b.on { background: var(--amber); width: 18px; border-radius: 4px; }
   .swipehint { text-align: center; color: var(--faint); font-size: 11px; margin-top: 8px; }
+  /* 개발 현황 — 영역별 탭 */
+  .atabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .atabs button { background: #18181b; border: 1px solid #27272a; color: var(--muted); border-radius: 999px; padding: 7px 14px; font-size: 12.5px; cursor: pointer; font-weight: 600; }
+  .atabs button.on { background: var(--amber); color: var(--bg); border-color: var(--amber); }
+  .arow { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; margin-bottom: 6px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .arow:hover { border-color: var(--amber); background: #1f1f23; }
+  .arow .an { font-size: 14px; color: var(--text); }
+  .arow .ar { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .arow .adate { color: var(--faint); font-size: 11px; }
+  .arow .achev { color: var(--amber); font-size: 12px; font-weight: 700; }
+  .todo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 8px; }
+  .todo-card .tt { font-size: 14px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .todo-card .tt .pri { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .todo-card .td { color: var(--muted); font-size: 12.5px; line-height: 1.65; margin-top: 7px; }
+  .pri-h { background: rgba(248,113,113,.15); color: #f87171; }
+  .pri-m { background: rgba(251,191,36,.15); color: #fbbf24; }
+  .pri-l { background: rgba(96,165,250,.15); color: #60a5fa; }
   .dlg-ov { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: none; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
   .dlg-ov.show { display: flex; }
   .dlg { background: var(--surface); border: 1px solid var(--border2); border-radius: 16px; max-width: 520px; width: 100%; max-height: 82vh; overflow-y: auto; padding: 22px; }
@@ -318,6 +335,10 @@
     </div>
     <a class="copy-btn" href="https://neko1015-facefit-backend.hf.space/zone" target="_blank" rel="noopener">열기 ↗</a>
   </div>
+
+  <div class="section-title">📂 개발 현황 (영역별) <span class="section-note">(탭 전환 · 완료 항목 클릭 시 변경 히스토리, 할 일은 설명 포함)</span></div>
+  <div class="atabs" id="atabs"></div>
+  <div id="apanels"></div>
 
   <div class="section-title">📋 개발 로드맵 (전체 할 일)</div>
   <div class="progress-bar"><div class="progress-fill"></div></div>
@@ -720,7 +741,25 @@
         + '<p><b>어떻게</b> — 구글 MediaPipe FaceLandmarker로 눈·코·입·윤곽 등 478점을 검출하고, 이 좌표로 비대칭·부기·다크서클·주름·3D 등을 계산해요.</p>' },
     reco: { match: ['제품 추천'], title: '맞춤 제품 추천',
       body: '<p><b>무엇</b> — 분석 결과(부기·피부톤·비대칭)에 맞춰 케어 제품을 추천합니다.</p>'
-        + '<p><b>어떻게</b> — 부기·붉은기·밝기·비대칭 점수를 기준으로 알맞은 제품을 앞쪽에 배치해 최대 5개까지 골라 보여줘요.</p>' }
+        + '<p><b>어떻게</b> — 부기·붉은기·밝기·비대칭 점수를 기준으로 알맞은 제품을 앞쪽에 배치해 최대 5개까지 골라 보여줘요.</p>' },
+    aiverify: { match: ['__none_aiverify'], title: 'AI 정확도 검증 종합 리포트',
+      body: '<p><b>무엇</b> — 검출·정확도·Zone·동일인·재현성·실사용 지표를 한 페이지(/validation)에 모아 <b>종합 신뢰도</b>를 보여줍니다.</p>'
+        + '<p><b>어떻게</b> — 정답을 만들 수 있는 합성 평가셋 + 실제 사용 기록으로 실측. 종합 94점.</p>' },
+    dbsafe: { match: ['__none_dbsafe'], title: 'DB 안전 처리 · 예외 강화',
+      body: '<p><b>무엇</b> — 서버가 오류·DB 끊김에도 죽지 않고 친절히 안내하도록 안정성을 높였어요.</p>'
+        + '<p><b>어떻게</b> — 모든 DB 연결을 with(자동 닫기)로 전환(누수 방지) + 전역 예외 핸들러 + 분석 항목별 부분 실패 허용.</p>' },
+    basisapp: { match: ['__none_basisapp'], title: '점수 근거값 앱 표시 (v13)',
+      body: '<p><b>무엇</b> — 앱의 스캔 결과·리포트에서 점수마다 근거("좌우 폭 차이 5.9%" 등)를 함께 보여줍니다.</p>'
+        + '<p><b>어떻게</b> — 백엔드가 근거값을 함께 내려주고, 앱이 점수 아래에 표시.</p>' },
+    consent: { match: ['__none_consent'], title: '약관·개인정보 동의 절차',
+      body: '<p><b>무엇</b> — 로그인 후 약관·개인정보(얼굴 생체정보) 동의를 받고 서버에 기록합니다.</p>'
+        + '<p><b>어떻게</b> — 필수 2 + 선택 1(마케팅) 동의 화면 → /auth/consent 기록. ※ 문구 법률 검토는 남음.</p>' },
+    incamera: { match: ['__none_incamera'], title: '인앱 카메라 촬영',
+      body: '<p><b>무엇</b> — 앱 안에서 직접 카메라를 띄워, 얼굴 가이드 타원 + 실시간 안내(정면·거리·위치)로 촬영합니다.</p>'
+        + '<p><b>어떻게</b> — expo-camera + 1.5초마다 /scan/guide로 안내. ※ 앱 v14(빌드 대기 7/1).</p>' },
+    app3d: { match: ['__none_app3d'], title: '앱 3D 안면 스캔(각도 보정)',
+      body: '<p><b>무엇</b> — 3D 안면 스캔도 얼굴을 똑바로 세워(roll 보정) 표시합니다.</p>'
+        + '<p><b>어떻게</b> — 점수 계산과 같은 보정을 3D 좌표에 적용. 갤러리 3D는 즉시 적용, 앱은 v14 빌드에 포함.</p>' }
   };
 
   // 항목별 변경 히스토리(시간순). 팝업 아래에 타임라인으로 보여줍니다.
@@ -765,7 +804,19 @@
     pose: [{ d: '06-22', t: '머리 각도 측정 + 정면 게이팅(고개 돌아간 사진 거르기)' }],
     upload: [{ d: '06-22', t: 'Expo uploadAsync로 교체 — APK 분석 실패 근본 해결' }],
     coldstart: [{ d: '06-22', t: '서버 깨우기 대기 + 분석 자동 재시도' }],
-    loginhist: [{ d: '06-23', t: '로그인 계정 히스토리 페이지(/logins) 추가' }]
+    loginhist: [{ d: '06-23', t: '로그인 계정 히스토리 페이지(/logins) 추가' }],
+    aiverify: [{ d: '06-26', t: '종합 검증 리포트(/validation) + 동일인 인식률 — 종합 94점' }],
+    dbsafe: [
+      { d: '06-26', t: 'DB 연결 with 전환 + 전역 예외 핸들러' },
+      { d: '06-26', t: '분석 항목별 부분 실패 허용(한 항목 실패해도 나머지 정상)' }
+    ],
+    basisapp: [{ d: '06-25', t: '스캔·리포트 점수에 근거값 표시 (앱 v13)' }],
+    consent: [{ d: '06-23', t: '약관·개인정보 동의 화면 + 서버 기록 (앱 v10)' }],
+    incamera: [{ d: '06-26', t: '인앱 카메라(가이드·실시간 안내) 구현 — 앱 v14(빌드 대기)' }],
+    app3d: [
+      { d: '06-22', t: '3D 안면 점구름 뷰어' },
+      { d: '06-26', t: '각도 보정(roll) 반영 — 갤러리 즉시 / 앱 v14' }
+    ]
   };
 
   function findDetailKey(t) {
@@ -860,6 +911,75 @@
     mockIdx = (mockIdx + dir + MOCK_ORDER.length) % MOCK_ORDER.length;
     renderMock();
   }
+
+  // ── 개발 현황(영역별 탭) ──
+  // 완료 항목은 키(DETAILS/HISTORY)로 묶고, 클릭 시 변경 히스토리 팝업. 할 일은 카테고리+설명.
+  var AREAS = [
+    { id: 'backend', label: '🤖 백엔드·AI엔진', keys: ['landmark', 'pose', 'angle', 'light', 'ground', 'wrinkleage', 'wrinklestab', 'sameperson', 'repro', 'acc', 'zone', 'perf', 'reco', 'aiverify', 'dbsafe'] },
+    { id: 'frontend', label: '📱 프론트(앱)', keys: ['basisapp', 'quality', 'incamera', 'app3d', 'kakao', 'consent', 'facecrop', 'upload', 'coldstart'] },
+    { id: 'infra', label: '🛠️ 인프라·운영', keys: ['dashboard', 'loginhist', 'gallery', 'postgres'] },
+    { id: 'todo', label: '📋 할 일·예정' }
+  ];
+  var TODO = [
+    { cat: '🔴 출시 전 필수', items: [
+      { name: '회원탈퇴·개인정보 삭제', pri: 'pri-h', desc: '사용자가 직접 계정과 얼굴 데이터를 지울 수 있게 합니다. 개인정보보호법상 필수이고, 이게 있어야 정식 출시·스토어 심사를 통과할 수 있어요. 신뢰도와 법적 안전성이 올라갑니다.' },
+      { name: '약관·방침 법률 검토 / 과대광고 검토', pri: 'pri-h', desc: '점수·효과 표현이 의료기기법·표시광고법에 걸리지 않는지 전문가가 확인합니다. 광고·문구를 안전하게 다듬어 법적 위험을 없애요.' }
+    ] },
+    { cat: '🟠 권장 (품질·성능)', items: [
+      { name: '동일인 인식률 개선(정렬 강건화)', pri: 'pri-m', desc: '검증에서 일부 사진의 동일인 인식이 흔들렸어요(80%). 얼굴 정렬을 더 튼튼히 하면 같은 사람을 더 정확히 알아봐, "다른 사람" 오인식이 줄어듭니다.' },
+      { name: '앱 홈/리포트 UI 리뉴얼', pri: 'pri-m', desc: '만든 목업대로 카드형 홈·링차트 리포트로 바꿉니다. 첫인상과 사용성이 크게 좋아지고 최신 앱처럼 보여요. (7/1 빌드에 포함)' },
+      { name: '인프라 유료 이전(상시 가동)', pri: 'pri-m', desc: '서버를 항상 켜두면 콜드스타트(첫 접속 30초~1분 지연)가 완전히 사라집니다. 사용자가 늘어도 안정적으로 빠르게 응답해요.' }
+    ] },
+    { cat: '🟡 추후', items: [
+      { name: '표정·눈 비대칭(블렌드셰이프)', pri: 'pri-l', desc: '추가 측정 항목 후보. 단, 검증에서 잡음이 신호보다 커서 보류 중이에요. 더 안정적인 방법을 찾으면 분석 항목이 늘어납니다.' },
+      { name: '플레이스토어 등록', pri: 'pri-l', desc: '지금은 APK를 직접 설치해요. 스토어에 올리면 일반 사용자가 쉽게 설치·자동 업데이트할 수 있습니다.' },
+      { name: '자동 테스트·장애 모니터링·백업', pri: 'pri-l', desc: '서버가 멈추거나 오류 날 때 빨리 알아채고 복구합니다. 운영 안정성이 올라가요.' }
+    ] }
+  ];
+  function _lastDate(key) { var h = HISTORY[key]; return (h && h.length) ? h[h.length - 1].d : ''; }
+  function showArea(id) {
+    var btns = document.querySelectorAll('#atabs button');
+    for (var i = 0; i < btns.length; i++) btns[i].className = (btns[i].getAttribute('data-a') === id) ? 'on' : '';
+    var ps = document.querySelectorAll('.area-panel');
+    for (var j = 0; j < ps.length; j++) ps[j].style.display = (ps[j].id === 'ap-' + id) ? 'block' : 'none';
+  }
+  (function renderAreas() {
+    var tabs = document.getElementById('atabs'), panels = document.getElementById('apanels');
+    if (!tabs || !panels) return;
+    AREAS.forEach(function (a, idx) {
+      var btn = document.createElement('button');
+      btn.textContent = a.label; btn.setAttribute('data-a', a.id);
+      if (idx === 0) btn.className = 'on';
+      btn.addEventListener('click', function () { showArea(a.id); });
+      tabs.appendChild(btn);
+      var panel = document.createElement('div');
+      panel.className = 'area-panel'; panel.id = 'ap-' + a.id;
+      panel.style.display = (idx === 0) ? 'block' : 'none';
+      if (a.id === 'todo') {
+        TODO.forEach(function (g) {
+          var h = document.createElement('h3'); h.className = 'rg-todo';
+          h.style.margin = '6px 4px 8px'; h.textContent = g.cat; panel.appendChild(h);
+          g.items.forEach(function (it) {
+            var c = document.createElement('div'); c.className = 'todo-card';
+            c.innerHTML = '<div class="tt"><span class="pri ' + it.pri + '">예정</span>' + it.name + '</div><div class="td">' + it.desc + '</div>';
+            panel.appendChild(c);
+          });
+        });
+      } else {
+        a.keys.forEach(function (k) {
+          if (!DETAILS[k]) return;
+          var d = _lastDate(k);
+          var row = document.createElement('div'); row.className = 'arow';
+          row.innerHTML = '<span class="an">' + DETAILS[k].title + '</span><span class="ar">'
+            + (d ? '<span class="adate">최종 ' + d + '</span>' : '') + '<span class="achev">히스토리 ▸</span></span>';
+          row.addEventListener('click', function () { openDlg(k); });
+          panel.appendChild(row);
+        });
+      }
+      panels.appendChild(panel);
+    });
+  })();
+
   // 좌우 스와이프로 목업 넘기기(모바일 터치 + 마우스 드래그)
   (function () {
     var b = document.getElementById('dlgbody'); var sx = null;
