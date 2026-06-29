@@ -290,6 +290,16 @@
   </div>
 
   <div class="card">
+    <div class="icon">🏅</div>
+    <div class="card-body">
+      <div class="card-title">AI 정확도 검증 리포트 <span class="tag tag-live">종합</span></div>
+      <div class="card-desc">검출·정확도·Zone·동일인·재현성·실사용을 한곳에 (종합 신뢰도)</div>
+      <a class="card-url" href="https://neko1015-facefit-backend.hf.space/validation" target="_blank" rel="noopener">https://neko1015-facefit-backend.hf.space/validation</a>
+    </div>
+    <a class="copy-btn" href="https://neko1015-facefit-backend.hf.space/validation" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+
+  <div class="card">
     <div class="icon">🎓</div>
     <div class="card-body">
       <div class="card-title">검출률·정확도 평가</div>
@@ -405,7 +415,7 @@
   </div>
   <div class="road-group">
     <h3 class="rg-todo">🟡 품질·신뢰 보완</h3>
-    <div class="road-item"><span class="ck">🟡</span><span class="t">AI 정확도 검증 <span class="sub">현재 참고용 추정 → 재현성·정확도 수치화(엔진 2순위)</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">AI 정확도 검증 <span class="sub">종합 검증 리포트(/validation) — 종합 신뢰도 94점(검출·정확도·Zone·동일인·재현성·실사용 한곳). ※ 동일인 인식률은 추가 개선 여지</span></span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">자동 테스트·장애 모니터링·백업 체계</span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">앱 정식 스토어 배포 <span class="sub">현재 APK 직접 설치 → 플레이스토어 등록·심사</span></span></div>
   </div>
@@ -433,7 +443,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">3D 안면 스캔 각도 보정 반영 <span class="sub">기울여 찍어도 똑바로 선 얼굴로 3D 표시 — 갤러리 즉시 적용 / 앱은 다음 빌드 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">AI 정확도 검증 종합 리포트(/validation) + 동일인 인식률 <span class="sub">종합 신뢰도 94점 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">3D 안면 스캔 각도 보정 반영 <span class="sub">기울여 찍어도 똑바로 선 얼굴로 3D 표시 — 갤러리 즉시 적용 / 앱은 다음 빌드</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">정식 얼굴 임베딩(SFace) 동일인 판별 <span class="sub">각도·표정에 강함(변형 유사도 0.98+) — 비율 방식 오탐 해결</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">주름 점수 안정화 <span class="sub">밝기 정규화+볼 기준 하한 — 재촬영 흔들림 std 5.0→3.4(변별력 유지)</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">부위별 처방(Zone) 정확도 평가셋 + /zone <span class="sub">케어 부위 지목 정확도 94%</span></span></div>
@@ -819,6 +830,7 @@
 
   // 완료 항목별 '적용(배포) 날짜'. match 글이 항목에 들어가면 그 날짜를 붙입니다(위에서부터 우선).
   var DATES = [
+    { d: '2026-06-26', m: ['AI 정확도 검증', '정확도 검증 리포트', '정확도 검증 종합'] },
     { d: '2026-06-26', m: ['정식 얼굴 임베딩', 'SFace'] },
     { d: '2026-06-25', m: ['주름 점수 안정화', '주름 안정화'] },
     { d: '2026-06-25', m: ['부위별 처방·Zone', '부위별 처방(Zone)', 'Zone 정확도'] },
