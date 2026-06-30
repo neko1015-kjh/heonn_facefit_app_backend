@@ -555,22 +555,23 @@ def kakao_callback(code: str = "", state: str = "web"):
 # 구글 로그인 (실제 OAuth) — 카카오와 같은 흐름
 # ─────────────────────────────────────────────────────────────
 @app.get("/auth/google/login")
-def google_login():
-    """구글 인증 페이지로 보냅니다."""
+def google_login(state: str = "web"):
+    """구글 인증 페이지로 보냅니다. state로 웹/앱(native) 복귀 대상을 구분합니다."""
     params = urllib.parse.urlencode({
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": GOOGLE_REDIRECT_URI,
         "response_type": "code",
         "scope": "openid email profile",
+        "state": state,  # 콜백까지 그대로 전달됨(웹/네이티브 구분용)
     })
     return RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
 
 
 @app.get("/auth/google/callback")
-def google_callback(code: str = ""):
-    """구글이 보내준 code로 사용자 정보를 받아 우리 계정을 만들고, 웹으로 토큰을 전달합니다."""
+def google_callback(code: str = "", state: str = "web"):
+    """구글이 보내준 code로 사용자 정보를 받아 우리 계정을 만들고, 웹/앱으로 토큰을 전달합니다."""
     if not code:
-        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+        return RedirectResponse(_oauth_redirect(state))
     try:
         # 1) code → 구글 access_token (구글은 client_secret 필수)
         token_body = urllib.parse.urlencode({
@@ -593,7 +594,7 @@ def google_callback(code: str = ""):
         google_id = str(ui.get("id", ""))
         name = ui.get("name") or ui.get("email") or "구글 사용자"
         if not google_id:
-            return RedirectResponse(f"{WEB_URL}/?login_error=1")
+            return RedirectResponse(_oauth_redirect(state))
 
         # 3) 같은 구글 계정이면 기존 사용자 재사용, 없으면 새로 생성
         with db.connect() as conn:
@@ -610,17 +611,17 @@ def google_callback(code: str = ""):
                 )
                 conn.commit()
 
-        return RedirectResponse(f"{WEB_URL}/?token={token}")
+        return RedirectResponse(_oauth_redirect(state, token))
     except urllib.error.HTTPError as he:
         try:
             detail = he.read().decode("utf-8", "ignore")
         except Exception:
             detail = ""
         print(f"구글 로그인 실패 {he.code}: {detail}")
-        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+        return RedirectResponse(_oauth_redirect(state))
     except Exception as e:
         print("구글 로그인 실패:", e)
-        return RedirectResponse(f"{WEB_URL}/?login_error=1")
+        return RedirectResponse(_oauth_redirect(state))
 
 
 # ─────────────────────────────────────────────────────────────
