@@ -450,6 +450,8 @@
   <div class="road-group">
     <h3 class="rg-done">2026-06-30 (오늘)</h3>
     <div class="road-item"><span class="ck">•</span><span class="t">로그인 화면 최신 디자인 리뉴얼(앱) — 골드 글로우·빛나는 제품 링·아이콘 버튼·눌림 반응 (다음 빌드 포함)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">네이버 진짜 로그인(실제 OAuth) 추가 — 카카오와 같은 방식(웹/앱) · 코드 완료, 네이버 열쇠(Client ID·Secret) 연결 대기</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">웹 미리보기 재배포 — 최신 코드(로그인 리뉴얼) HF Static 반영</span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-06-26</h3>
@@ -769,6 +771,10 @@
     app3d: { match: ['__none_app3d'], title: '앱 3D 안면 스캔(각도 보정)',
       body: '<p><b>무엇</b> — 3D 안면 스캔도 얼굴을 똑바로 세워(roll 보정) 표시합니다.</p>'
         + '<p><b>어떻게</b> — 점수 계산과 같은 보정을 3D 좌표에 적용. 갤러리 3D는 즉시 적용, 앱은 v14 빌드에 포함.</p>' },
+    naver: { match: ['네이버 진짜 로그인', '네이버 로그인(실제'], title: '네이버 진짜 로그인 (OAuth)',
+      body: '<p><b>무엇</b> — 임시 계정이 아니라 <b>실제 네이버 계정</b>으로 로그인합니다. 카카오와 똑같은 방식이에요.</p>'
+        + '<p><b>어떻게</b> — 웹은 네이버 인증 페이지로 이동, 휴대폰(앱)은 인앱 브라우저로 네이버 인증 후 앱 전용 주소(facefit://)로 로그인 토큰을 받아 자동 복귀합니다. 백엔드 /auth/naver/login·callback 추가.</p>'
+        + '<p><b>남은 일</b> — 네이버 개발자센터에서 발급한 <b>열쇠 2개(Client ID·Secret)</b>를 서버에 넣으면 바로 동작합니다(등록 진행 중).</p>' },
     loginui: { match: ['__none_loginui'], title: '로그인 화면 최신 디자인 리뉴얼',
       body: '<p><b>무엇</b> — 앱 첫 화면(로그인)을 최신 스타일로 다듬었어요. 프리미엄 뷰티테크 느낌을 살렸습니다.</p>'
         + '<p><b>어떻게</b> — ① 화면 위쪽에 은은하게 퍼지는 <b>골드 글로우</b> ② 제품 이미지에 <b>빛나는 링</b> ③ 카카오·네이버·구글 버튼에 <b>아이콘 + 눌림 반응</b>(살짝 작아짐) ④ 여백·타이포·정렬 정돈, 약관은 하단 고정. <b>새 라이브러리 없이</b> 기존 react-native-svg로 구현.</p>'
@@ -833,6 +839,9 @@
     ],
     loginui: [
       { d: '06-30', t: '로그인 화면 최신 디자인 리뉴얼 — 골드 글로우·빛나는 제품 링·아이콘 버튼·눌림 반응 (다음 빌드 포함)' }
+    ],
+    naver: [
+      { d: '06-30', t: '네이버 진짜 로그인(실제 OAuth) 추가 — 백엔드 라우트 + 앱 연동(웹/앱). 열쇠 연결 대기' }
     ]
   };
 
@@ -933,7 +942,7 @@
   // 완료 항목은 키(DETAILS/HISTORY)로 묶고, 클릭 시 변경 히스토리 팝업. 할 일은 카테고리+설명.
   var AREAS = [
     { id: 'backend', label: '🤖 백엔드·AI엔진', keys: ['landmark', 'pose', 'angle', 'light', 'ground', 'wrinkleage', 'wrinklestab', 'sameperson', 'repro', 'acc', 'zone', 'perf', 'reco', 'aiverify', 'dbsafe'] },
-    { id: 'frontend', label: '📱 프론트(앱)', keys: ['loginui', 'basisapp', 'quality', 'incamera', 'app3d', 'kakao', 'consent', 'facecrop', 'upload', 'coldstart'] },
+    { id: 'frontend', label: '📱 프론트(앱)', keys: ['loginui', 'basisapp', 'quality', 'incamera', 'app3d', 'kakao', 'naver', 'consent', 'facecrop', 'upload', 'coldstart'] },
     { id: 'infra', label: '🛠️ 인프라·운영', keys: ['dashboard', 'loginhist', 'gallery', 'postgres'] },
     { id: 'todo', label: '📋 할 일·예정' }
   ];
