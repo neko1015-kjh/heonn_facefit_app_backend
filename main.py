@@ -623,6 +623,88 @@ def google_callback(code: str = ""):
         return RedirectResponse(f"{WEB_URL}/?login_error=1")
 
 
+# ─────────────────────────────────────────────────────────────
+# 네이버 로그인 (실제 OAuth) — 카카오와 같은 흐름(웹/앱 모두 지원)
+# 흐름: 프론트 → /auth/naver/login → 네이버 인증 → /auth/naver/callback → 웹/앱으로 토큰 전달
+# ※ 네이버 개발자센터에서 발급한 두 열쇠를 서버 환경변수로 넣어야 동작합니다.
+# ─────────────────────────────────────────────────────────────
+NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "")
+NAVER_CLIENT_SECRET = os.environ.get("NAVER_CLIENT_SECRET", "")
+NAVER_REDIRECT_URI = "https://neko1015-facefit-backend.hf.space/auth/naver/callback"
+
+
+@app.get("/auth/naver/login")
+def naver_login(state: str = "web"):
+    """네이버 인증 페이지로 보냅니다. state로 웹/앱(native) 복귀 대상을 구분합니다."""
+    params = urllib.parse.urlencode({
+        "response_type": "code",
+        "client_id": NAVER_CLIENT_ID,
+        "redirect_uri": NAVER_REDIRECT_URI,
+        "state": state,  # 콜백까지 그대로 전달됨(웹/네이티브 구분 + 위조 방지용)
+    })
+    return RedirectResponse(f"https://nid.naver.com/oauth2.0/authorize?{params}")
+
+
+@app.get("/auth/naver/callback")
+def naver_callback(code: str = "", state: str = "web"):
+    """네이버가 보내준 code로 사용자 정보를 받아 우리 계정을 만들고, 웹/앱으로 토큰을 전달합니다."""
+    if not code:
+        return RedirectResponse(_oauth_redirect(state))
+    try:
+        # 1) code → 네이버 access_token (네이버는 client_secret 필수)
+        token_body = urllib.parse.urlencode({
+            "grant_type": "authorization_code",
+            "client_id": NAVER_CLIENT_ID,
+            "client_secret": NAVER_CLIENT_SECRET,
+            "code": code,
+            "state": state,
+        }).encode()
+        req = urllib.request.Request("https://nid.naver.com/oauth2.0/token", data=token_body)
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            access_token = json.loads(r.read())["access_token"]
+
+        # 2) access_token → 네이버 사용자 정보 (응답이 {"response": {...}} 안에 들어옵니다)
+        me_req = urllib.request.Request("https://openapi.naver.com/v1/nid/me")
+        me_req.add_header("Authorization", f"Bearer {access_token}")
+        with urllib.request.urlopen(me_req, timeout=10) as r:
+            me = json.loads(r.read())
+        profile = me.get("response", {}) if isinstance(me, dict) else {}
+        naver_id = str(profile.get("id", ""))
+        nickname = profile.get("nickname") or profile.get("name") or "네이버 사용자"
+        if not naver_id:
+            return RedirectResponse(_oauth_redirect(state))
+
+        # 3) 같은 네이버 계정이면 기존 사용자 재사용, 없으면 새로 생성
+        with db.connect() as conn:
+            row = conn.execute(
+                "SELECT token FROM users WHERE provider = 'naver' AND provider_id = ?", (naver_id,)
+            ).fetchone()
+            if row:
+                token = row[0]
+            else:
+                token = uuid.uuid4().hex
+                conn.execute(
+                    "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (token, "naver", naver_id, nickname, datetime.now().isoformat(timespec="seconds")),
+                )
+                conn.commit()
+
+        # 4) 웹/앱으로 토큰 전달 (프론트가 URL의 token을 읽어 로그인 처리)
+        return RedirectResponse(_oauth_redirect(state, token))
+    except urllib.error.HTTPError as he:
+        # 네이버가 돌려준 상세 에러 내용을 로그에 남깁니다(원인 진단용).
+        try:
+            detail = he.read().decode("utf-8", "ignore")
+        except Exception:
+            detail = ""
+        print(f"네이버 로그인 실패 {he.code}: {detail}")
+        return RedirectResponse(_oauth_redirect(state))
+    except Exception as e:
+        print("네이버 로그인 실패:", e)
+        return RedirectResponse(_oauth_redirect(state))
+
+
 # 저장된 토큰으로 로그인 상태를 확인합니다(자동 로그인).
 @app.get("/auth/me")
 def auth_me(authorization: str = Header(None)):
