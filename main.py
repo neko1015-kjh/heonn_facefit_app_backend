@@ -1029,17 +1029,23 @@ def _compute_embedding(image, face, w, h):
     try:
         xs = [p.x for p in face]
         ys = [p.y for p in face]
+        # [품질 가드] 화면에서 얼굴이 너무 작으면(폭<22%) 정렬·인식이 불안정해 임베딩을 건너뜁니다.
+        # → 신뢰 낮은 임베딩이 동일인 비교를 망쳐 '다른 사람'으로 오판하는 일을 막습니다.
+        if (max(xs) - min(xs)) < 0.22:
+            return []
         x0, y0 = min(xs) * w, min(ys) * h
         bw, bh = (max(xs) - min(xs)) * w, (max(ys) - min(ys)) * h
 
-        def mid(i, j):
-            return ((face[i].x + face[j].x) / 2 * w, (face[i].y + face[j].y) / 2 * h)
+        def eye(idxs):
+            # 눈 중심 = 눈 코너+위아래 눈꺼풀 평균(코너 2점보다 동공에 가까워 정렬이 더 정확)
+            return (sum(face[i].x for i in idxs) / len(idxs) * w,
+                    sum(face[i].y for i in idxs) / len(idxs) * h)
 
         def pt(i):
             return (face[i].x * w, face[i].y * h)
 
-        re_x, re_y = mid(33, 133)    # 오른쪽 눈(이미지 왼쪽) 중심
-        le_x, le_y = mid(362, 263)   # 왼쪽 눈 중심
+        re_x, re_y = eye([33, 133, 159, 145])    # 오른쪽 눈(이미지 왼쪽) 중심
+        le_x, le_y = eye([362, 263, 386, 374])   # 왼쪽 눈 중심
         no_x, no_y = pt(1)           # 코끝
         rm_x, rm_y = pt(61)          # 오른쪽 입꼬리
         lm_x, lm_y = pt(291)         # 왼쪽 입꼬리
