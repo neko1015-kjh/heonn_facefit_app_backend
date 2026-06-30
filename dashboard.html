@@ -448,7 +448,11 @@
   <div class="section-title">📜 전체 개발 히스토리 <span class="section-note">(날짜순 — 개발·수정·업데이트 전부 / 지금부터 모든 내용 여기 기록)</span></div>
 
   <div class="road-group">
-    <h3 class="rg-done">2026-06-26 (오늘)</h3>
+    <h3 class="rg-done">2026-06-30 (오늘)</h3>
+    <div class="road-item"><span class="ck">•</span><span class="t">로그인 화면 최신 디자인 리뉴얼(앱) — 골드 글로우·빛나는 제품 링·아이콘 버튼·눌림 반응 (다음 빌드 포함)</span></div>
+  </div>
+  <div class="road-group">
+    <h3 class="rg-done">2026-06-26</h3>
     <div class="road-item"><span class="ck">•</span><span class="t">전후 비교 슬라이더 매끄럽게(앱) — 절대좌표+스크롤 가로채기 방지 (v14 빌드 대기)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">동일인 인식률 개선 — 정확한 눈 중심 정렬 + 저품질(작은 얼굴) 가드 → 인식률 80%→100%, 종합 96점</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">분석(mediapipe/OpenCV) 예외 처리 — 부분 실패 허용, 이상 이미지에도 서버 안 죽음</span></div>
@@ -764,7 +768,11 @@
         + '<p><b>어떻게</b> — expo-camera + 1.5초마다 /scan/guide로 안내. ※ 앱 v14(빌드 대기 7/1).</p>' },
     app3d: { match: ['__none_app3d'], title: '앱 3D 안면 스캔(각도 보정)',
       body: '<p><b>무엇</b> — 3D 안면 스캔도 얼굴을 똑바로 세워(roll 보정) 표시합니다.</p>'
-        + '<p><b>어떻게</b> — 점수 계산과 같은 보정을 3D 좌표에 적용. 갤러리 3D는 즉시 적용, 앱은 v14 빌드에 포함.</p>' }
+        + '<p><b>어떻게</b> — 점수 계산과 같은 보정을 3D 좌표에 적용. 갤러리 3D는 즉시 적용, 앱은 v14 빌드에 포함.</p>' },
+    loginui: { match: ['__none_loginui'], title: '로그인 화면 최신 디자인 리뉴얼',
+      body: '<p><b>무엇</b> — 앱 첫 화면(로그인)을 최신 스타일로 다듬었어요. 프리미엄 뷰티테크 느낌을 살렸습니다.</p>'
+        + '<p><b>어떻게</b> — ① 화면 위쪽에 은은하게 퍼지는 <b>골드 글로우</b> ② 제품 이미지에 <b>빛나는 링</b> ③ 카카오·네이버·구글 버튼에 <b>아이콘 + 눌림 반응</b>(살짝 작아짐) ④ 여백·타이포·정렬 정돈, 약관은 하단 고정. <b>새 라이브러리 없이</b> 기존 react-native-svg로 구현.</p>'
+        + '<p><b>다음 빌드</b> — 코드 완료, APK는 다음 빌드에 포함됩니다.</p>' }
   };
 
   // 항목별 변경 히스토리(시간순). 팝업 아래에 타임라인으로 보여줍니다.
@@ -822,6 +830,9 @@
     app3d: [
       { d: '06-22', t: '3D 안면 점구름 뷰어' },
       { d: '06-26', t: '각도 보정(roll) 반영 — 갤러리 즉시 / 앱 v14' }
+    ],
+    loginui: [
+      { d: '06-30', t: '로그인 화면 최신 디자인 리뉴얼 — 골드 글로우·빛나는 제품 링·아이콘 버튼·눌림 반응 (다음 빌드 포함)' }
     ]
   };
 
@@ -922,7 +933,7 @@
   // 완료 항목은 키(DETAILS/HISTORY)로 묶고, 클릭 시 변경 히스토리 팝업. 할 일은 카테고리+설명.
   var AREAS = [
     { id: 'backend', label: '🤖 백엔드·AI엔진', keys: ['landmark', 'pose', 'angle', 'light', 'ground', 'wrinkleage', 'wrinklestab', 'sameperson', 'repro', 'acc', 'zone', 'perf', 'reco', 'aiverify', 'dbsafe'] },
-    { id: 'frontend', label: '📱 프론트(앱)', keys: ['basisapp', 'quality', 'incamera', 'app3d', 'kakao', 'consent', 'facecrop', 'upload', 'coldstart'] },
+    { id: 'frontend', label: '📱 프론트(앱)', keys: ['loginui', 'basisapp', 'quality', 'incamera', 'app3d', 'kakao', 'consent', 'facecrop', 'upload', 'coldstart'] },
     { id: 'infra', label: '🛠️ 인프라·운영', keys: ['dashboard', 'loginhist', 'gallery', 'postgres'] },
     { id: 'todo', label: '📋 할 일·예정' }
   ];
@@ -1003,6 +1014,7 @@
 
   // 완료 항목별 '적용(배포) 날짜'. match 글이 항목에 들어가면 그 날짜를 붙입니다(위에서부터 우선).
   var DATES = [
+    { d: '2026-06-30', m: ['로그인 화면 최신 디자인', '로그인 화면 리뉴얼', '로그인 디자인'] },
     { d: '2026-06-26', m: ['AI 정확도 검증', '정확도 검증 리포트', '정확도 검증 종합'] },
     { d: '2026-06-26', m: ['정식 얼굴 임베딩', 'SFace'] },
     { d: '2026-06-25', m: ['주름 점수 안정화', '주름 안정화'] },
