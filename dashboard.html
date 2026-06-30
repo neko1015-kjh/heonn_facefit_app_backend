@@ -436,7 +436,7 @@
   </div>
   <div class="road-group">
     <h3 class="rg-todo">🟡 품질·신뢰 보완</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">AI 정확도 검증 <span class="sub">종합 검증 리포트(/validation) — 종합 신뢰도 94점(검출·정확도·Zone·동일인·재현성·실사용 한곳). ※ 동일인 인식률은 추가 개선 여지</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">AI 정확도 검증 <span class="sub">종합 검증 리포트(/validation) — 종합 신뢰도 96점(검출·정확도·Zone·동일인·재현성·실사용 한곳). 동일인 인식률 개선 후 100% 달성</span></span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">자동 테스트·장애 모니터링·백업 체계</span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">앱 정식 스토어 배포 <span class="sub">현재 APK 직접 설치 → 플레이스토어 등록·심사</span></span></div>
   </div>
@@ -449,6 +449,7 @@
 
   <div class="road-group">
     <h3 class="rg-done">2026-06-26 (오늘)</h3>
+    <div class="road-item"><span class="ck">•</span><span class="t">동일인 인식률 개선 — 정확한 눈 중심 정렬 + 저품질(작은 얼굴) 가드 → 인식률 80%→100%, 종합 96점</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">분석(mediapipe/OpenCV) 예외 처리 — 부분 실패 허용, 이상 이미지에도 서버 안 죽음</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">DB 연결 안전 처리(with 자동 닫기) + 전역 예외 핸들러</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">AI 정확도 검증 종합 리포트(/validation) + 동일인 인식률 — 종합 신뢰도 94점</span></div>
@@ -510,7 +511,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">AI 정확도 검증 종합 리포트(/validation) + 동일인 인식률 <span class="sub">종합 신뢰도 94점 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">동일인 인식률 개선 <span class="sub">정확한 눈 중심 정렬 + 저품질 가드 → 인식률 80%→100%, 종합 96점 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">AI 정확도 검증 종합 리포트(/validation) + 동일인 인식률 <span class="sub">검출·정확도·Zone·동일인·재현성·실사용 종합</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">3D 안면 스캔 각도 보정 반영 <span class="sub">기울여 찍어도 똑바로 선 얼굴로 3D 표시 — 갤러리 즉시 적용 / 앱은 다음 빌드</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">정식 얼굴 임베딩(SFace) 동일인 판별 <span class="sub">각도·표정에 강함(변형 유사도 0.98+) — 비율 방식 오탐 해결</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">주름 점수 안정화 <span class="sub">밝기 정규화+볼 기준 하한 — 재촬영 흔들림 std 5.0→3.4(변별력 유지)</span></span></div>
@@ -535,6 +537,7 @@
 
   <div class="section-title">🔧 수정·보완 내역 <span class="section-note">(버그 수정·개선 기록 — 최신순, 계속 추가)</span></div>
   <div class="road-group">
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · 동일인 인식률 개선 <span class="sub">정확한 눈 중심 정렬 + 저품질 얼굴 가드 → 인식률 80%→100%(최저 코사인 0.104→0.953)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · 분석 예외 처리(부분 실패 허용) <span class="sub">이상 이미지·항목 오류에도 서버 안 죽고 안내 반환, 한 항목 실패해도 나머지 정상</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · DB 연결 안전 처리 + 전역 예외 핸들러 <span class="sub">모든 엔드포인트 with(자동 닫기) 전환 — 연결 누수 방지 / 예상 못한 오류도 친절한 안내</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · 동일인 판별 오탐 수정 <span class="sub">이전 사진 임베딩을 즉석 재계산 + 임베딩 비교 불가 시 차단 안 함 → 같은 사람을 '다른 사람'으로 막던 문제 해결</span></span></div>
@@ -788,7 +791,8 @@
     sameperson: [
       { d: '~초기', t: '얼굴 비율 9개 + 성별 휴리스틱으로 동일인 판별' },
       { d: '06-26', t: '정식 얼굴 임베딩(SFace, 코사인 0.363)으로 교체 — 각도·표정에 강함' },
-      { d: '06-26', t: '오탐 수정 — 이전 사진 임베딩 재계산 + 비교 불가 시 차단 안 함' }
+      { d: '06-26', t: '오탐 수정 — 이전 사진 임베딩 재계산 + 비교 불가 시 차단 안 함' },
+      { d: '06-26', t: '정확한 눈 중심 정렬 + 저품질 가드 → 인식률 100%(최저 코사인 0.953)' }
     ],
     gallery: [
       { d: '06-22', t: '사진 클릭 → 3D 복원(점구름) 팝업' },
