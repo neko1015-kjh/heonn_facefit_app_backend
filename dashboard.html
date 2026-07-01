@@ -454,6 +454,7 @@
     <div class="road-item"><span class="ck">•</span><span class="t">동일인 인식률 2차 개선 — 최근 N장 중 최고 유사도 비교(오탐↓) + 좌우반전 TTA(같은사람 최저 0.953→0.979, 타인 최고 0.109·분리여유 0.87)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">운영 안정성 3종 완료 — /health 자가진단 강화(DB·모델·데이터수, 이상 시 503) + 자동 테스트 8건(pytest CI) + 장애 모니터링(15분마다, 이메일 알림 ON)·주간 백업 워크플로 등록</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">3D 복원 고도화(A) — kNN→공식 삼각망 + Taubin 스무딩 + <b>솔리드 셰이딩</b>(면 채움·법선 조명·뒷면 숨김·시점 교정). 그물→입체 얼굴 (앱·웹 미리보기 반영)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">3D 복원 고도화(B) — <b>three.js 3D 엔진</b> 도입(expo-gl+three): 부드러운 법선 셰이딩·조명·안티앨리어싱. 휴대폰=three.js / 웹 미리보기=SVG판 자동 분기 · 앱은 다음 빌드(v16)</span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-06-30</h3>
@@ -883,7 +884,8 @@
     app3d: [
       { d: '06-22', t: '3D 안면 점구름 뷰어' },
       { d: '06-26', t: '각도 보정(roll) 반영 — 갤러리 즉시 / 앱 v14' },
-      { d: '07-01', t: '고도화(A) — kNN → 공식 삼각망 + Taubin 스무딩 + 솔리드 셰이딩(면 채움·법선 조명·뒷면 숨김·시점 교정). 그물 → 입체 얼굴 (앱·웹 미리보기 반영)' }
+      { d: '07-01', t: '고도화(A) — kNN → 공식 삼각망 + Taubin 스무딩 + 솔리드 셰이딩(면 채움·법선 조명·뒷면 숨김·시점 교정). 그물 → 입체 얼굴 (앱·웹 미리보기 반영)' },
+      { d: '07-01', t: '고도화(B) — three.js 3D 엔진(expo-gl+three) 도입. 부드러운 법선 셰이딩·조명. 휴대폰=three.js/웹=SVG 자동 분기. 앱은 다음 빌드(v16)' }
     ],
     loginui: [
       { d: '06-30', t: '로그인 화면 최신 디자인 리뉴얼 — 골드 글로우·빛나는 제품 링·아이콘 버튼·눌림 반응 (다음 빌드 포함)' }
