@@ -451,6 +451,7 @@
     <h3 class="rg-done">2026-07-01 (오늘)</h3>
     <div class="road-item"><span class="ck">•</span><span class="t">앱 v15 APK 빌드·배포 — 인앱 카메라·3D 보정·슬라이더·로그인 리뉴얼·네이버/구글 로그인 등 그동안 작업 전부 포함(설치 가능)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">사진 노출 페이지 얼굴만 표시 — /uploads?face=1 얼굴 크롭(캐시) · 갤러리 썸네일 즉시 적용 / 앱 전후슬라이더·기록·시뮬은 다음 빌드</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">동일인 인식률 2차 개선 — 최근 N장 중 최고 유사도 비교(오탐↓) + 좌우반전 TTA(같은사람 최저 0.953→0.979, 타인 최고 0.109·분리여유 0.87)</span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-06-30</h3>
@@ -551,6 +552,7 @@
 
   <div class="section-title">🔧 수정·보완 내역 <span class="section-note">(버그 수정·개선 기록 — 최신순, 계속 추가)</span></div>
   <div class="road-group">
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 동일인 인식률 2차 개선 <span class="sub">직전 1장만 보던 방식 → 최근 N장 중 최고 유사도로 판별(같은 사람 오탐↓) + 좌우반전 TTA로 유사도 안정화(같은사람 최저 0.953→0.979, 타인 최고 0.109)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 사진 노출 시 얼굴만 표시 <span class="sub">서버 ?face=1 얼굴 크롭(캐시) — 갤러리 썸네일 즉시 / 앱 전후슬라이더·기록·시뮬 다음 빌드 (분석 부위 모달은 원본 유지)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-30</b> · 소셜 로그인 3종 완성 <span class="sub">카카오·네이버·구글 모두 진짜 OAuth로 통일(웹/앱 공용 흐름) — 네이버·구글 열쇠 등록·서버 배포 완료(웹 즉시 / 앱은 다음 빌드)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-30</b> · 로그인 화면 최신 디자인 리뉴얼(앱) <span class="sub">골드 글로우·빛나는 제품 링·아이콘 버튼·눌림 반응 (다음 빌드 포함)</span></span></div>
@@ -845,7 +847,8 @@
       { d: '~초기', t: '얼굴 비율 9개 + 성별 휴리스틱으로 동일인 판별' },
       { d: '06-26', t: '정식 얼굴 임베딩(SFace, 코사인 0.363)으로 교체 — 각도·표정에 강함' },
       { d: '06-26', t: '오탐 수정 — 이전 사진 임베딩 재계산 + 비교 불가 시 차단 안 함' },
-      { d: '06-26', t: '정확한 눈 중심 정렬 + 저품질 가드 → 인식률 100%(최저 코사인 0.953)' }
+      { d: '06-26', t: '정확한 눈 중심 정렬 + 저품질 가드 → 인식률 100%(최저 코사인 0.953)' },
+      { d: '07-01', t: '2차 개선 — 최근 N장 중 최고 유사도 비교(직전 1장만 보던 오탐↓) + 좌우반전 TTA(같은사람 최저 0.979, 타인 최고 0.109)' }
     ],
     gallery: [
       { d: '06-22', t: '사진 클릭 → 3D 복원(점구름) 팝업' },
