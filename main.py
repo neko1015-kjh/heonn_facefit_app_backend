@@ -393,9 +393,31 @@ def read_root():
 
 
 @app.get("/health")
-def health_check():
-    # face_embedding: 정식 얼굴 임베딩(SFace) 모델이 로드됐는지 (동일인 판별 진단용)
-    return {"status": "ok", "face_embedding": face_recognizer is not None}
+def health_check(response: Response):
+    """서버 자가진단 — DB 연결·핵심 모델·저장된 데이터 수를 점검합니다.
+    문제가 있으면 HTTP 503으로 응답해, 모니터링(GitHub Actions)이 장애를 감지·이메일 알림하도록 합니다."""
+    checks = {
+        "face_embedding": face_recognizer is not None,   # 동일인 판별(SFace)
+        "face_landmarker": face_landmarker is not None,  # 얼굴 검출(분석 핵심)
+        "gender_age_model": gender_net is not None and age_net is not None,
+    }
+    healthy = True
+    # DB 연결 + 저장 데이터 수(백업 점검용 지표)
+    try:
+        with db.connect() as conn:
+            checks["users"] = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            checks["scans"] = conn.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
+        checks["db"] = True
+    except Exception as e:
+        checks["db"] = False
+        checks["db_error"] = str(e)[:200]
+        healthy = False
+    # 얼굴 검출 모델이 없으면 분석 자체가 불가 → 비정상으로 간주
+    if not checks["face_landmarker"]:
+        healthy = False
+    if not healthy:
+        response.status_code = 503
+    return {"status": "ok" if healthy else "degraded", "healthy": healthy, **checks}
 
 
 # ─────────────────────────────────────────────────────────────
