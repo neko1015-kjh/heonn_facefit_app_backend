@@ -545,6 +545,9 @@
 
   <div class="section-title">🔧 수정·보완 내역 <span class="section-note">(버그 수정·개선 기록 — 최신순, 계속 추가)</span></div>
   <div class="road-group">
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-30</b> · 소셜 로그인 3종 완성 <span class="sub">카카오·네이버·구글 모두 진짜 OAuth로 통일(웹/앱 공용 흐름) — 네이버·구글 열쇠 등록·서버 배포 완료(웹 즉시 / 앱은 다음 빌드)</span></span></div>
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-30</b> · 로그인 화면 최신 디자인 리뉴얼(앱) <span class="sub">골드 글로우·빛나는 제품 링·아이콘 버튼·눌림 반응 (다음 빌드 포함)</span></span></div>
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-30</b> · HF 배포 방식 정정 <span class="sub">GitHub 푸시만으론 서버 반영 안 됨을 확인 → HF Space 직접 푸시로 해결(네이버 라우트 404 원인)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · 전후 비교 슬라이더 매끄럽게(앱) <span class="sub">절대좌표(pageX) 기반 + 스크롤뷰 가로채기 방지 — 드래그 튐·끊김 해결 (v14 빌드 대기)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · 동일인 인식률 개선 <span class="sub">정확한 눈 중심 정렬 + 저품질 얼굴 가드 → 인식률 80%→100%(최저 코사인 0.104→0.953)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>06-26</b> · 분석 예외 처리(부분 실패 허용) <span class="sub">이상 이미지·항목 오류에도 서버 안 죽고 안내 반환, 한 항목 실패해도 나머지 정상</span></span></div>
@@ -624,6 +627,27 @@
       <a class="card-url" href="https://developers.kakao.com/console/app/1490580" target="_blank" rel="noopener">developers.kakao.com · 앱 1490580</a>
     </div>
     <a class="copy-btn" href="https://developers.kakao.com/console/app/1490580" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+  <div class="card">
+    <div class="icon">🟢</div>
+    <div class="card-body">
+      <div class="card-title">네이버 개발자센터 <span class="tag tag-live">HeOnn FaceFit</span></div>
+      <div class="card-desc">네이버 로그인 (실제 OAuth · 웹/앱)</div>
+      <div class="card-desc">🔒 Client ID·Secret은 서버 비밀 저장소(HF Secret)에만 보관</div>
+      <a class="card-url" href="https://developers.naver.com/apps/#/myapps" target="_blank" rel="noopener">developers.naver.com · 내 애플리케이션</a>
+    </div>
+    <a class="copy-btn" href="https://developers.naver.com/apps/#/myapps" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+  <div class="card">
+    <div class="icon">🔵</div>
+    <div class="card-body">
+      <div class="card-title">구글 클라우드 콘솔 <span class="tag tag-live">HeOnn FaceFit</span></div>
+      <div class="card-desc">구글 로그인 (OAuth 클라이언트 · 웹/앱)</div>
+      <div class="card-desc">⚠️ 현재 테스트 모드 — 등록된 테스트 사용자만 로그인 (정식 출시 시 게시 필요)</div>
+      <div class="card-desc">🔒 클라이언트 ID·보안 비밀은 서버 비밀 저장소(HF Secret)에만 보관</div>
+      <a class="card-url" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">console.cloud.google.com · 사용자 인증 정보</a>
+    </div>
+    <a class="copy-btn" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">열기 ↗</a>
   </div>
   <div class="card">
     <div class="icon">💾</div>
