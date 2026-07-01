@@ -1,26 +1,32 @@
-name: 주간 DB 백업
+name: CI (자동 테스트)
 on:
-  schedule:
-    - cron: '0 3 * * 0'
+  push:
+    branches: [ master ]
+  pull_request:
   workflow_dispatch:
 jobs:
-  backup:
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: install pg client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - name: dump
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          if [ -z "$DATABASE_URL" ]; then echo "DATABASE_URL not set - skip"; exit 0; fi
-          ts=$(date +%Y%m%d)
-          pg_dump "$DATABASE_URL" --no-owner --no-privileges | gzip > "backup-$ts.sql.gz"
-          ls -lh "backup-$ts.sql.gz"
-      - name: upload
-        if: ${{ hashFiles('backup-*.sql.gz') != '' }}
-        uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          name: db-backup
-          path: backup-*.sql.gz
-          retention-days: 30
+          python-version: '3.11'
+      - name: model cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            face_landmarker.task
+            face_recognition_sface_2021dec.onnx
+            gender_net.caffemodel
+            age_net.caffemodel
+            gender_deploy.prototxt
+            age_deploy.prototxt
+          key: models-v1
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest httpx
+      - name: test
+        run: pytest -q
