@@ -2262,10 +2262,11 @@ def gallery():
             extra += " · " + esc(gender)
         if age:
             extra += " · " + esc(age)
-        img_src = f"/uploads/{fname}"
+        img_src = f"/uploads/{fname}"          # 원본(분석 부위 보기 등에서 사용)
+        face_src = f"/uploads/{fname}?face=1"  # 얼굴만 잘라낸 썸네일
         cards.append(
             f'<figure class="card" data-id="{rid}" data-label="{who}" data-img="{img_src}">'
-            f'<img loading="lazy" src="{img_src}" alt="분석 사진"/>'
+            f'<img loading="lazy" src="{face_src}" alt="분석 사진(얼굴)"/>'
             f'<figcaption><b>{who}</b> · {created_at}<br/>'
             f'비대칭 {symmetry} · 부기 {balance}{extra}<br/>'
             f'다크서클 {dark_circle} · 주름 {wrinkle}'
@@ -2534,16 +2535,74 @@ def scan_landmarks(scan_id: int):
         return {"detected": False, "message": "3D 복원 중 오류가 발생했어요."}
 
 
+# 얼굴만 잘라낸 사진(썸네일)을 만들 때 재계산을 줄이기 위한 메모리 캐시.
+# 파일명 → 잘라낸 JPEG bytes. 컨테이너 재시작 시 사라져도 무방(다시 계산).
+_FACE_CROP_CACHE = {}
+_FACE_CROP_CACHE_MAX = 400
+
+
+def _face_crop_jpeg(raw):
+    """원본 사진(bytes)에서 얼굴 부분만 정사각형으로 잘라 JPEG bytes로 돌려줍니다.
+    얼굴을 못 찾으면 None(→ 호출부에서 원본을 그대로 사용)."""
+    try:
+        image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            return None
+        image = _downscale_for_analysis(image)
+        h, w = image.shape[:2]
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        result = _safe_detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+        if not result.face_landmarks:
+            return None
+        face = result.face_landmarks[0]
+        xs = [p.x for p in face]
+        ys = [p.y for p in face]
+        # 얼굴 특징점의 상하좌우 끝(픽셀)
+        fx1, fx2 = min(xs) * w, max(xs) * w
+        fy1, fy2 = min(ys) * h, max(ys) * h
+        bw, bh = fx2 - fx1, fy2 - fy1
+        cx, cy = (fx1 + fx2) / 2, (fy1 + fy2) / 2
+        # 얼굴 크기의 약 1.5배 정사각형으로, 이마·머리카락이 보이게 살짝 위로 이동
+        half = max(bw, bh) * 0.75
+        cy -= bh * 0.12
+        x1 = max(0, int(cx - half)); x2 = min(w, int(cx + half))
+        y1 = max(0, int(cy - half)); y2 = min(h, int(cy + half))
+        crop = image[y1:y2, x1:x2]
+        if crop.size == 0:
+            return None
+        ok, buf = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+        if not ok:
+            return None
+        return buf.tobytes()
+    except Exception as e:
+        print("얼굴 크롭 실패:", e)
+        return None
+
+
 # 저장된 사진을 DB에서 읽어 돌려줍니다. ("/uploads/{파일명}")
+# ?face=1 을 붙이면 얼굴 부분만 잘라 돌려줍니다(개인정보 보호 + 보기 편함).
 @app.get("/uploads/{filename}")
-def get_uploaded_image(filename: str):
+def get_uploaded_image(filename: str, face: int = 0):
     with db.connect() as conn:
         row = conn.execute(
             "SELECT image_data FROM scans WHERE image_filename = ?", (filename,)
         ).fetchone()
     if not row or row[0] is None:
         return Response(status_code=404)
-    return Response(content=bytes(row[0]), media_type="image/jpeg")
+    raw = bytes(row[0])
+    if face:
+        # 캐시에 있으면 바로 사용, 없으면 계산 후 저장
+        cached = _FACE_CROP_CACHE.get(filename)
+        if cached is None:
+            cached = _face_crop_jpeg(raw)
+            if cached is not None:
+                if len(_FACE_CROP_CACHE) >= _FACE_CROP_CACHE_MAX:
+                    _FACE_CROP_CACHE.pop(next(iter(_FACE_CROP_CACHE)), None)
+                _FACE_CROP_CACHE[filename] = cached
+        if cached is not None:
+            return Response(content=cached, media_type="image/jpeg")
+        # 얼굴을 못 찾으면 원본을 그대로 보여줍니다.
+    return Response(content=raw, media_type="image/jpeg")
 
 
 # 저장된 이력을 최신순으로 돌려줍니다. (로그인한 사용자의 기록만)
