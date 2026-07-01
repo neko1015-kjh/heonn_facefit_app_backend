@@ -453,6 +453,7 @@
     <div class="road-item"><span class="ck">•</span><span class="t">사진 노출 페이지 얼굴만 표시 — /uploads?face=1 얼굴 크롭(캐시) · 갤러리 썸네일 즉시 적용 / 앱 전후슬라이더·기록·시뮬은 다음 빌드</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">동일인 인식률 2차 개선 — 최근 N장 중 최고 유사도 비교(오탐↓) + 좌우반전 TTA(같은사람 최저 0.953→0.979, 타인 최고 0.109·분리여유 0.87)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">운영 안정성 3종 완료 — /health 자가진단 강화(DB·모델·데이터수, 이상 시 503) + 자동 테스트 8건(pytest CI) + 장애 모니터링(15분마다, 이메일 알림 ON)·주간 백업 워크플로 등록</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">3D 복원 고도화(A) — 가까운점 추측(kNN)→ MediaPipe 공식 삼각망(1322에지) + Taubin 스무딩. 깔끔한 얼굴 면·노이즈↓ (앱, 다음 빌드)</span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-06-30</h3>
@@ -880,7 +881,8 @@
     incamera: [{ d: '06-26', t: '인앱 카메라(가이드·실시간 안내) 구현 — 앱 v14(빌드 대기)' }],
     app3d: [
       { d: '06-22', t: '3D 안면 점구름 뷰어' },
-      { d: '06-26', t: '각도 보정(roll) 반영 — 갤러리 즉시 / 앱 v14' }
+      { d: '06-26', t: '각도 보정(roll) 반영 — 갤러리 즉시 / 앱 v14' },
+      { d: '07-01', t: '고도화(A) — kNN 추측 → MediaPipe 공식 삼각망(1322에지) + Taubin 스무딩. 깔끔한 얼굴 면·노이즈 감소 (앱, 다음 빌드)' }
     ],
     loginui: [
       { d: '06-30', t: '로그인 화면 최신 디자인 리뉴얼 — 골드 글로우·빛나는 제품 링·아이콘 버튼·눌림 반응 (다음 빌드 포함)' }
