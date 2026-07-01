@@ -1,0 +1,20 @@
+name: 서버 장애 모니터링
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: health check
+        run: |
+          URL="https://neko1015-facefit-backend.hf.space/health"
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /tmp/h.json -w "%{http_code}" --max-time 90 "$URL" || echo 000)
+            echo "try $i: HTTP $code"; cat /tmp/h.json 2>/dev/null; echo
+            if [ "$code" = "200" ]; then echo "ok"; exit 0; fi
+            sleep 30
+          done
+          echo "::error::server /health unhealthy"
+          exit 1
