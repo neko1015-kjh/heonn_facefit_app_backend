@@ -5,20 +5,27 @@ on:
   workflow_dispatch:
 jobs:
   backup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-      - name: install pg client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: install pg17 client
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
       - name: dump
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          if [ -z "$DATABASE_URL" ]; then echo "DATABASE_URL not set - skip"; exit 0; fi
+          set -o pipefail
+          export PATH="/usr/lib/postgresql/17/bin:$PATH"
+          if [ -z "$DATABASE_URL" ]; then echo "::error::DATABASE_URL not set"; exit 1; fi
           ts=$(date +%Y%m%d)
           pg_dump "$DATABASE_URL" --no-owner --no-privileges | gzip > "backup-$ts.sql.gz"
-          ls -lh "backup-$ts.sql.gz"
+          size=$(stat -c%s "backup-$ts.sql.gz")
+          echo "backup size: $size bytes"
+          if [ "$size" -lt 1000 ]; then echo "::error::backup too small"; exit 1; fi
       - name: upload
-        if: ${{ hashFiles('backup-*.sql.gz') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: db-backup
