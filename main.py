@@ -289,6 +289,10 @@ SFACE_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_recogniti
 SFACE_PATH = os.path.join(BASE_DIR, "face_recognition_sface_2021dec.onnx")
 # 같은 사람으로 인정하는 코사인 유사도 기준(SFace 공식 권장값)
 EMB_THRESHOLD = 0.363
+# 동일인 판별 시 비교할 '최근 기준 사진' 개수.
+# 직전 1장만 보면 그 사진이 우연히 나쁠 때(각도·조명) 같은 사람도 튕기므로,
+# 최근 여러 장 중 '가장 잘 맞는 것'과 비교해 오탐(같은 사람 거부)을 줄입니다.
+EMB_REF_COUNT = 5
 
 face_recognizer = None
 try:
@@ -1136,8 +1140,12 @@ def _compute_embedding(image, face, w, h):
         box = np.array([[x0, y0, bw, bh, re_x, re_y, le_x, le_y, no_x, no_y,
                          rm_x, rm_y, lm_x, lm_y, 1.0]], dtype=np.float32)
         aligned = face_recognizer.alignCrop(image, box)
-        feat = face_recognizer.feature(aligned)  # 1 x 128
-        return [round(float(v), 5) for v in feat.flatten()]
+        # [좌우반전 보강(TTA)] 원본 + 좌우로 뒤집은 얼굴의 특징을 평균냅니다.
+        # 같은 사람은 좌우가 거의 대칭이라, 두 특징을 합치면 흔들림이 줄어 유사도가 더 안정적입니다.
+        feat = face_recognizer.feature(aligned).flatten()          # 1 x 128
+        feat_flip = face_recognizer.feature(cv2.flip(aligned, 1)).flatten()
+        avg = (feat + feat_flip) / 2.0
+        return [round(float(v), 5) for v in avg]
     except Exception as e:
         print("임베딩 추출 실패:", e)
         return []
@@ -1370,23 +1378,30 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     cur_gender = res.get("gender", "")
     cur_emb = res.get("embedding") or []
     with db.connect() as conn:
-        prev = conn.execute(
-            "SELECT embedding, image_data FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT 1",
-            (user_id,),
-        ).fetchone()
-    if prev:
-        try:
-            prev_emb = json.loads(prev[0]) if prev[0] else []
-        except (ValueError, TypeError):
-            prev_emb = []
-        # 옛 기록이라 임베딩이 없으면, 저장된 사진에서 즉석으로 다시 계산해 항상 임베딩끼리 비교
-        if not prev_emb and len(prev) > 1 and prev[1] is not None:
-            prev_emb = _embedding_from_raw(bytes(prev[1]))
+        prev_rows = conn.execute(
+            "SELECT embedding, image_data FROM scans WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (user_id, EMB_REF_COUNT),
+        ).fetchall()
+    if prev_rows:
+        # 최근 여러 장과 각각 비교해 '가장 잘 맞는' 유사도를 찾습니다.
+        # 최근 사진 중 하나라도 충분히 닮았으면 같은 사람으로 인정 → 직전 1장이
+        # 우연히 나빠서(각도·조명) 같은 사람을 튕기던 오탐을 줄입니다.
+        best_cos = None
+        for prev in prev_rows:
+            try:
+                prev_emb = json.loads(prev[0]) if prev[0] else []
+            except (ValueError, TypeError):
+                prev_emb = []
+            # 옛 기록이라 임베딩이 없으면, 저장된 사진에서 즉석으로 다시 계산해 항상 임베딩끼리 비교
+            if not prev_emb and prev[1] is not None:
+                prev_emb = _embedding_from_raw(bytes(prev[1]))
+            cos = _embedding_cosine(cur_emb, prev_emb)
+            if cos is not None:
+                best_cos = cos if best_cos is None else max(best_cos, cos)
 
-        cos = _embedding_cosine(cur_emb, prev_emb)
-        # 임베딩 비교가 가능할 때만, 그리고 분명히 다를 때(코사인 < 0.363)만 차단합니다.
+        # 임베딩 비교가 가능할 때만, 그리고 최근 어느 사진과도 분명히 다를 때(코사인 < 0.363)만 차단합니다.
         # 비교가 불가능하면(모델 미가용 등) 차단하지 않아, 같은 사람을 막는 오탐을 방지합니다.
-        if cos is not None and cos < EMB_THRESHOLD:
+        if best_cos is not None and best_cos < EMB_THRESHOLD:
             return {
                 "detected": False,
                 "different_person": True,
