@@ -458,7 +458,7 @@
     <div class="road-item"><span class="ck">•</span><span class="t">3D 복원 고도화(B) — <b>three.js 3D 엔진</b> 도입(expo-gl+three): 3점 조명+반구광·필름 톤매핑·매트골드 재질·안티앨리어싱. <b>웹 미리보기에서도 three.js 표시</b>(튜닝 확인용) · 앱은 다음 빌드(v16)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">3D 복원 고도화(C) — <b>메시 세분화(2단계)+스무딩</b>으로 468점→수천 점 조밀화(매끈한 곡면). ※ 딥러닝 조밀복원(3DDFA/DECA)은 BFM·FLAME <b>상용 라이선스 이슈</b>로 보류 — 라이선스 안전한 세분화 방식 채택</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">리포트·분석결과에 <b>얼굴 부위 미니맵 + 상세 문구</b> 상시 표시(클릭 없이) — 항목별 도식 얼굴 그림에 부위 하이라이트(비대칭=눈·입 좌우 / 부기=좌우 볼폭 / 다크서클=눈밑 / 주름=이마·미간·눈가·팔자)</span></div>
-    <div class="road-item"><span class="ck">•</span><span class="t">인앱 카메라 <b>3·2·1 자동 촬영</b> + 촬영 후 분석 연결 안정화(카메라 충돌·재시도) — 다음 빌드(v17)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">인앱 카메라 <b>3·2·1 자동 촬영</b> + 촬영 후 분석 연결 안정화(카메라 충돌·재시도) + <b>타원 바깥 딤 처리</b> — 다음 빌드(v17)</span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-06-30</h3>
@@ -599,7 +599,7 @@
   </div>
   <div class="road-group">
     <h3 class="rg-todo">🟠 사용성·디자인 보강</h3>
-    <div class="road-item"><span class="ck">🟠</span><span class="t">타원 바깥 어둡게(딤) 처리 <span class="sub">현재는 점선 테두리만 — 얼굴 영역에 집중되도록 마스크</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">타원 바깥 어둡게(딤) 처리 <span class="sub">타원만 뚫는 마스크로 얼굴 영역에 집중 — 구현 완료(v17 빌드 이후)</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">자동 촬영 <span class="sub">정렬되면 3·2·1 카운트다운 후 자동 촬영 — 구현 완료(v16 빌드 이후) · 촬영 후 분석 연결 안정화</span></span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">정렬 완료 시 햅틱(진동) 피드백</span></div>
   </div>
@@ -893,7 +893,8 @@
     consent: [{ d: '06-23', t: '약관·개인정보 동의 화면 + 서버 기록 (앱 v10)' }],
     incamera: [
       { d: '06-26', t: '인앱 카메라(가이드·실시간 안내) 구현 — 앱 v14' },
-      { d: '07-01', t: '얼굴 정렬 시 3·2·1 자동 촬영 + 촬영 안정화(가이드 프레임 충돌 방지·재시도) — 촬영 후 분석 안 넘어가던 문제 수정' }
+      { d: '07-01', t: '얼굴 정렬 시 3·2·1 자동 촬영 + 촬영 안정화(가이드 프레임 충돌 방지·재시도) — 촬영 후 분석 안 넘어가던 문제 수정' },
+      { d: '07-01', t: '타원 바깥 딤(마스크) 처리 — 얼굴 영역에 집중되게' }
     ],
     app3d: [
       { d: '06-22', t: '3D 안면 점구름 뷰어' },
