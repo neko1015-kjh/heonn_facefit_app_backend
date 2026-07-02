@@ -458,6 +458,7 @@
     <div class="road-item"><span class="ck">•</span><span class="t">3D 복원 고도화(B) — <b>three.js 3D 엔진</b> 도입(expo-gl+three): 3점 조명+반구광·필름 톤매핑·매트골드 재질·안티앨리어싱. <b>웹 미리보기에서도 three.js 표시</b>(튜닝 확인용) · 앱은 다음 빌드(v16)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">3D 복원 고도화(C) — <b>메시 세분화(2단계)+스무딩</b>으로 468점→수천 점 조밀화(매끈한 곡면). ※ 딥러닝 조밀복원(3DDFA/DECA)은 BFM·FLAME <b>상용 라이선스 이슈</b>로 보류 — 라이선스 안전한 세분화 방식 채택</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">리포트·분석결과에 <b>얼굴 부위 미니맵 + 상세 문구</b> 상시 표시(클릭 없이) — 항목별 도식 얼굴 그림에 부위 하이라이트(비대칭=눈·입 좌우 / 부기=좌우 볼폭 / 다크서클=눈밑 / 주름=이마·미간·눈가·팔자)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">인앱 카메라 <b>3·2·1 자동 촬영</b> + 촬영 후 분석 연결 안정화(카메라 충돌·재시도) — 다음 빌드(v17)</span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-06-30</h3>
@@ -559,6 +560,7 @@
 
   <div class="section-title">🔧 수정·보완 내역 <span class="section-note">(버그 수정·개선 기록 — 최신순, 계속 추가)</span></div>
   <div class="road-group">
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 인앱 카메라 자동촬영·분석연결 수정 <span class="sub">얼굴 정렬 시 3·2·1 자동 촬영 추가 + 가이드 프레임과 셔터의 카메라 충돌로 촬영 후 분석으로 안 넘어가던 문제 해결(대기·재시도) — 다음 빌드(v17)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 3D 코 깊이 과장 수정 <span class="sub">깊이 배수(Z_AMP) 1.7→1.0으로 낮춰 실물 비율로 — 코가 실제보다 깊게 보이던 문제 해결(앱·웹 반영)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 동일인 인식률 2차 개선 <span class="sub">직전 1장만 보던 방식 → 최근 N장 중 최고 유사도로 판별(같은 사람 오탐↓) + 좌우반전 TTA로 유사도 안정화(같은사람 최저 0.953→0.979, 타인 최고 0.109)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 사진 노출 시 얼굴만 표시 <span class="sub">서버 ?face=1 얼굴 크롭(캐시) — 갤러리 썸네일 즉시 / 앱 전후슬라이더·기록·시뮬 다음 빌드 (분석 부위 모달은 원본 유지)</span></span></div>
@@ -598,7 +600,7 @@
   <div class="road-group">
     <h3 class="rg-todo">🟠 사용성·디자인 보강</h3>
     <div class="road-item"><span class="ck">🟠</span><span class="t">타원 바깥 어둡게(딤) 처리 <span class="sub">현재는 점선 테두리만 — 얼굴 영역에 집중되도록 마스크</span></span></div>
-    <div class="road-item"><span class="ck">🟠</span><span class="t">자동 촬영 옵션 <span class="sub">정렬이 좋으면 3·2·1 카운트다운 후 자동 촬영</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">자동 촬영 <span class="sub">정렬되면 3·2·1 카운트다운 후 자동 촬영 — 구현 완료(v16 빌드 이후) · 촬영 후 분석 연결 안정화</span></span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">정렬 완료 시 햅틱(진동) 피드백</span></div>
   </div>
   <div class="road-group">
@@ -889,7 +891,10 @@
     ],
     basisapp: [{ d: '06-25', t: '스캔·리포트 점수에 근거값 표시 (앱 v13)' }],
     consent: [{ d: '06-23', t: '약관·개인정보 동의 화면 + 서버 기록 (앱 v10)' }],
-    incamera: [{ d: '06-26', t: '인앱 카메라(가이드·실시간 안내) 구현 — 앱 v14(빌드 대기)' }],
+    incamera: [
+      { d: '06-26', t: '인앱 카메라(가이드·실시간 안내) 구현 — 앱 v14' },
+      { d: '07-01', t: '얼굴 정렬 시 3·2·1 자동 촬영 + 촬영 안정화(가이드 프레임 충돌 방지·재시도) — 촬영 후 분석 안 넘어가던 문제 수정' }
+    ],
     app3d: [
       { d: '06-22', t: '3D 안면 점구름 뷰어' },
       { d: '06-26', t: '각도 보정(roll) 반영 — 갤러리 즉시 / 앱 v14' },
