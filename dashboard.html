@@ -460,6 +460,7 @@
     <div class="road-item"><span class="ck">•</span><span class="t">리포트·분석결과에 <b>얼굴 부위 미니맵 + 상세 문구</b> 상시 표시(클릭 없이) — 항목별 도식 얼굴 그림에 부위 하이라이트(비대칭=눈·입 좌우 / 부기=좌우 볼폭 / 다크서클=눈밑 / 주름=이마·미간·눈가·팔자)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">인앱 카메라 <b>3·2·1 자동 촬영</b> + 촬영 후 분석 연결 안정화(카메라 충돌·재시도) + <b>타원 바깥 딤 처리</b> — 다음 빌드(v17)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">전후 비교 슬라이더 <b>Animated 전환</b> — 드래그 재렌더 제거로 모바일에서 매끄럽게(웹 미리보기 즉시 반영)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">분석 실패 시 <b>"다시 시도" 버튼</b> — 방금 사진으로 바로 재분석(콜드스타트·일시 오류 대응)</span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-06-30</h3>
@@ -561,6 +562,7 @@
 
   <div class="section-title">🔧 수정·보완 내역 <span class="section-note">(버그 수정·개선 기록 — 최신순, 계속 추가)</span></div>
   <div class="road-group">
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 분석 실패 시 "다시 시도" 버튼 <span class="sub">방금 그 사진으로 바로 재분석 — 콜드스타트·일시적 연결 오류에 사용자가 쉽게 재시도(웹 미리보기 즉시 반영)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 전후 비교 슬라이더 부드럽게(2차) <span class="sub">드래그 위치를 React 상태→<b>Animated.Value</b>로 전환 — 드래그마다 화면 전체 재렌더되던 원인 제거(clip 폭·핸들 translateX). 모바일에서 매끄럽게 이동</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 인앱 카메라 자동촬영·분석연결 수정 <span class="sub">얼굴 정렬 시 3·2·1 자동 촬영 추가 + 가이드 프레임과 셔터의 카메라 충돌로 촬영 후 분석으로 안 넘어가던 문제 해결(대기·재시도) — 다음 빌드(v17)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 3D 코 깊이 과장 수정 <span class="sub">깊이 배수(Z_AMP) 1.7→1.0으로 낮춰 실물 비율로 — 코가 실제보다 깊게 보이던 문제 해결(앱·웹 반영)</span></span></div>
