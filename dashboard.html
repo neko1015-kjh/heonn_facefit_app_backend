@@ -461,6 +461,8 @@
     <div class="road-item"><span class="ck">•</span><span class="t">인앱 카메라 <b>3·2·1 자동 촬영</b> + 촬영 후 분석 연결 안정화(카메라 충돌·재시도) + <b>타원 바깥 딤 처리</b> — 다음 빌드(v17)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">전후 비교 슬라이더 <b>Animated 전환</b> — 드래그 재렌더 제거로 모바일에서 매끄럽게(웹 미리보기 즉시 반영)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">분석 실패 시 <b>"다시 시도" 버튼</b> — 방금 사진으로 바로 재분석(콜드스타트·일시 오류 대응)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">기기 첫 연결 후 <b>위치 포인트 셋팅 가이드</b> — 4단계(왼턱·오른턱·양볼 위→아래 / 양쪽 눈밑 왼→오른) 방향 애니메이션 + 포인트 잡기·저장</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">스토어 문구 변경 — "너를 위한 맞춤 솔루션" → "나를 위한 맞춤 솔루션"</span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-06-30</h3>
@@ -821,6 +823,10 @@
       body: '<p><b>무엇</b> — 검출된 얼굴 점을 3D로 돌려보는 기능. 각도 보정(똑바로 세우기)부터 사실적인 렌더까지 단계적으로 고도화했어요.</p>'
         + '<p><b>어떻게</b> — ① 각도 보정(roll) ② 공식 삼각망 + Taubin 스무딩(매끈) ③ 메시 세분화로 조밀화(수천 점) ④ <b>three.js 3D 엔진</b>(expo-gl)로 조명·재질·환경반사 렌더 — 청동/골드 조각상 느낌.</p>'
         + '<p><b>참고</b> — 휴대폰=three.js / 웹 미리보기=three.js. 깊이 배수 1.0(실물 비율). 딥러닝 조밀복원(3DDFA/DECA)은 상용 라이선스 이슈로 보류. 앱은 v16 빌드부터.</p>' },
+    calib: { match: ['위치 포인트 셋팅 가이드', '위치 포인트', '기기 셋팅 가이드'], title: '기기 첫 연결 셋팅 가이드 (위치 포인트)',
+      body: '<p><b>무엇</b> — 괄사 기기를 처음 블루투스 연결한 뒤 위치 포인트 데이터가 없으면, 얼굴 부위별로 어떻게 대야 하는지 안내하고 포인트를 잡습니다.</p>'
+        + '<p><b>4단계</b> — ① 왼쪽 턱선(위→아래) ② 오른쪽 턱선(위→아래) ③ 양쪽 볼(위→아래) ④ 양쪽 눈 밑(왼→오른쪽). 각 단계마다 얼굴 도식에 <b>방향 화살표 애니메이션</b> + "포인트 잡기".</p>'
+        + '<p><b>어떻게</b> — 4개 포인트를 잡으면 기기에 저장(AsyncStorage)해 다음부턴 건너뜁니다. "나중에 설정"으로 건너뛸 수도 있어요. ※ 실제 센서 연동은 기기 프로토콜 확정 후 연결 예정.</p>' },
     faceregion: { match: ['얼굴 부위 미니맵', '얼굴 부위 표시', '분석 부위'], title: '결과의 얼굴 부위 표시',
       body: '<p><b>무엇</b> — 비대칭·부기·다크서클·주름 각 결과가 <b>얼굴의 어느 부위</b>를 본 건지 보여줍니다.</p>'
         + '<p><b>어떻게</b> — ① 리포트·분석결과 카드에 <b>도식 얼굴 미니맵</b>(부위 하이라이트) + 상세 문구를 <b>클릭 없이 항상</b> 표시 ② 점수를 탭하면 실제 사진 위에 점·선으로 정밀 표시.</p>'
@@ -914,6 +920,9 @@
       { d: '06-23', t: '점수 클릭 → 사진 위에 분석 부위(점·선) 표시 (앱 v7)' },
       { d: '07-01', t: '결과에 얼굴 부위 요약 문구 상시 표시(리포트·분석결과)' },
       { d: '07-01', t: '얼굴 부위 미니맵(도식 얼굴 그림)+상세 문구 상시 표시 — 클릭 없이 위치 시각화' }
+    ],
+    calib: [
+      { d: '07-01', t: '기기 첫 연결 후 위치 포인트 셋팅 가이드(4단계) 구현 — 턱 좌·우·볼 위→아래 / 눈밑 왼→오른 방향 안내 + 포인트 잡기·저장' }
     ],
     loginui: [
       { d: '06-30', t: '로그인 화면 최신 디자인 리뉴얼 — 골드 글로우·빛나는 제품 링·아이콘 버튼·눌림 반응 (다음 빌드 포함)' }
@@ -1026,7 +1035,7 @@
   // 완료 항목은 키(DETAILS/HISTORY)로 묶고, 클릭 시 변경 히스토리 팝업. 할 일은 카테고리+설명.
   var AREAS = [
     { id: 'backend', label: '🤖 백엔드·AI엔진', keys: ['landmark', 'pose', 'angle', 'light', 'ground', 'wrinkleage', 'wrinklestab', 'sameperson', 'repro', 'acc', 'zone', 'perf', 'reco', 'aiverify', 'dbsafe'] },
-    { id: 'frontend', label: '📱 프론트(앱)', keys: ['loginui', 'basisapp', 'quality', 'incamera', 'app3d', 'faceregion', 'kakao', 'naver', 'google', 'consent', 'facecrop', 'upload', 'coldstart'] },
+    { id: 'frontend', label: '📱 프론트(앱)', keys: ['loginui', 'basisapp', 'quality', 'incamera', 'calib', 'app3d', 'faceregion', 'kakao', 'naver', 'google', 'consent', 'facecrop', 'upload', 'coldstart'] },
     { id: 'infra', label: '🛠️ 인프라·운영', keys: ['dashboard', 'loginhist', 'gallery', 'postgres'] },
     { id: 'todo', label: '📋 할 일·예정' }
   ];
