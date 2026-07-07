@@ -287,8 +287,11 @@ except Exception as e:
 # (기존 '얼굴 비율 서명'보다 각도·표정·조명 변화에 훨씬 강함)
 SFACE_URL = "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
 SFACE_PATH = os.path.join(BASE_DIR, "face_recognition_sface_2021dec.onnx")
-# 같은 사람으로 인정하는 코사인 유사도 기준(SFace 공식 권장값)
-EMB_THRESHOLD = 0.363
+# 같은 사람으로 인정하는 코사인 유사도 기준.
+# SFace 기본은 0.363이나, 실측상 타인 유사도가 ~0.09로 매우 낮고 같은 사람은 어려운
+# 변형(안경·조명·색온도·블러)에도 0.95+라, 기준을 0.30으로 낮춰 실제 재촬영에서
+# 같은 사람을 '다른 사람'으로 튕기는 오탐을 더 줄입니다(타인과는 여전히 큰 여유).
+EMB_THRESHOLD = 0.30
 # 동일인 판별 시 비교할 '최근 기준 사진' 개수.
 # 직전 1장만 보면 그 사진이 우연히 나쁠 때(각도·조명) 같은 사람도 튕기므로,
 # 최근 여러 장 중 '가장 잘 맞는 것'과 비교해 오탐(같은 사람 거부)을 줄입니다.
@@ -1405,24 +1408,34 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
             (user_id, EMB_REF_COUNT),
         ).fetchall()
     if prev_rows:
-        # 최근 여러 장과 각각 비교해 '가장 잘 맞는' 유사도를 찾습니다.
-        # 최근 사진 중 하나라도 충분히 닮았으면 같은 사람으로 인정 → 직전 1장이
-        # 우연히 나빠서(각도·조명) 같은 사람을 튕기던 오탐을 줄입니다.
-        best_cos = None
+        # 최근 여러 장의 임베딩을 모읍니다(없으면 저장된 사진에서 즉석 재계산).
+        refs = []
         for prev in prev_rows:
             try:
                 prev_emb = json.loads(prev[0]) if prev[0] else []
             except (ValueError, TypeError):
                 prev_emb = []
-            # 옛 기록이라 임베딩이 없으면, 저장된 사진에서 즉석으로 다시 계산해 항상 임베딩끼리 비교
             if not prev_emb and prev[1] is not None:
                 prev_emb = _embedding_from_raw(bytes(prev[1]))
-            cos = _embedding_cosine(cur_emb, prev_emb)
+            if prev_emb:
+                refs.append(prev_emb)
+
+        # 기준 후보 = 최근 각 사진 + '최근 사진들의 평균 임베딩'(노이즈가 줄어 더 안정적).
+        candidates = list(refs)
+        if len(refs) >= 2 and all(len(r) == len(refs[0]) for r in refs):
+            mean_emb = np.array(refs, dtype=np.float32).mean(axis=0).tolist()
+            candidates.append(mean_emb)
+
+        # 후보 중 '가장 잘 맞는' 유사도. 최근 어느 것이든 충분히 닮으면 같은 사람으로 인정
+        # → 직전 1장이 우연히 나빠서(각도·조명·안경) 같은 사람을 튕기던 오탐을 줄입니다.
+        best_cos = None
+        for ref in candidates:
+            cos = _embedding_cosine(cur_emb, ref)
             if cos is not None:
                 best_cos = cos if best_cos is None else max(best_cos, cos)
 
-        # 임베딩 비교가 가능할 때만, 그리고 최근 어느 사진과도 분명히 다를 때(코사인 < 0.363)만 차단합니다.
-        # 비교가 불가능하면(모델 미가용 등) 차단하지 않아, 같은 사람을 막는 오탐을 방지합니다.
+        # 임베딩 비교가 가능할 때만, 그리고 최근 어느 것과도 분명히 다를 때만 차단합니다.
+        # 비교 불가(모델 미가용 등)면 차단하지 않아 같은 사람을 막는 오탐을 방지합니다.
         if best_cos is not None and best_cos < EMB_THRESHOLD:
             return {
                 "detected": False,
