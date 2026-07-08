@@ -268,6 +268,16 @@
   </div>
 
   <div class="card">
+    <div class="icon">📐</div>
+    <div class="card-body">
+      <div class="card-title">맞춤 헤드 도면 만들기 <span class="tag tag-live">신규</span></div>
+      <div class="card-desc">3D 스캔 파일(.obj/.ply) 또는 사진(정면+좌/우) 업로드 → 헤드 CAD(DXF)</div>
+      <a class="card-url" href="https://neko1015-facefit-backend.hf.space/head/build" target="_blank" rel="noopener">/head/build</a>
+    </div>
+    <a class="copy-btn" href="https://neko1015-facefit-backend.hf.space/head/build" target="_blank" rel="noopener">열기 ↗</a>
+  </div>
+
+  <div class="card">
     <div class="icon">🤖</div>
     <div class="card-body">
       <div class="card-title">백엔드 (AI 서버) <span class="tag tag-live">운영</span></div>
@@ -453,6 +463,7 @@
     <div class="road-item"><span class="ck">•</span><span class="t">동일인 인식률 3차 개선 배포(서버) — 기준 0.30 + 평균 임베딩 기준</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">맞춤 괄사 <b>헤드 도면(CAD)</b> 생성 — 얼굴 턱선 윤곽을 mm 환산(동공간거리 63mm 기준)해 헤드 곡선 도면(DXF) + 미리보기 페이지 + 갤러리 버튼(/scan/&lt;id&gt;/head)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">헤드 CAD v2 — 얼굴 전체가 아닌 <b>디바이스 헤드(75mm 접촉부) 1:1 밀착</b> 설계로 개선(곡률R·최대굴곡 측정 · 스케일 실측보정 · 턱선 괄사 사용법 반영)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">헤드 CAD v3 + <b>A+B 입력</b> — 접촉 곡선 기준·평면 외곽·본체 결합부 정확화 / <b>3D 스캔 파일(.obj·ply) 업로드</b>(실척)·<b>사진 정면+좌우 다중</b> 지원. 업로드 도구 <code>/head/build</code></span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-07-01</h3>
@@ -928,7 +939,8 @@
     headcad: [
       { d: '07-08', t: '얼굴 턱선 윤곽→mm 환산→헤드 곡선 도면(DXF)+미리보기 페이지+갤러리 버튼 (1차 도면)' },
       { d: '07-08', t: 'v2 — 턱선 전체 대신 디바이스 헤드(75mm 접촉부) 1:1 밀착 설계로 개선. 곡률R·최대굴곡 측정 + 스케일 실측보정(ipd_mm)·헤드크기(head_mm) 파라미터 + 턱선 괄사 사용법 반영' },
-      { d: '07-08', t: 'v3 — 얼굴에 대고 마사지하는 접촉 곡선 기준으로 재정의 + 헤드 평면 외곽(초승달형)·본체 결합부(돌기+나사구멍 2개)까지 정확화(디바이스 본체와 합체) + 미리보기/DXF 수정' }
+      { d: '07-08', t: 'v3 — 얼굴에 대고 마사지하는 접촉 곡선 기준으로 재정의 + 헤드 평면 외곽(초승달형)·본체 결합부(돌기+나사구멍 2개)까지 정확화(디바이스 본체와 합체) + 미리보기/DXF 수정' },
+      { d: '07-08', t: 'A+B 입력 — 3D 스캔 파일(.obj/ASCII PLY, 실척) 업로드 + 사진(정면+좌/우 다중, 뷰 평균) 지원. /head/build 업로드 도구' }
     ],
     dbsafe: [
       { d: '06-26', t: 'DB 연결 with 전환 + 전역 예외 핸들러' },
