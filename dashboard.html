@@ -451,6 +451,7 @@
     <h3 class="rg-done">2026-07-08 (오늘)</h3>
     <div class="road-item"><span class="ck">•</span><span class="t">앱 <b>v17</b> APK 빌드·배포 — 인앱카메라(자동촬영·딤·분석연결)·전후 슬라이더 부드럽게·분석 실패 다시시도·기기 셋팅 가이드·문구 변경 포함(설치 가능한 최신)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">동일인 인식률 3차 개선 배포(서버) — 기준 0.30 + 평균 임베딩 기준</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">맞춤 괄사 <b>헤드 도면(CAD)</b> 생성 — 얼굴 턱선 윤곽을 mm 환산(동공간거리 63mm 기준)해 헤드 곡선 도면(DXF) + 미리보기 페이지(턱 폭·높이·턱끝 반경) + 갤러리 버튼(/scan/&lt;id&gt;/head)</span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-07-01</h3>
@@ -827,6 +828,10 @@
     reco: { match: ['제품 추천'], title: '맞춤 제품 추천',
       body: '<p><b>무엇</b> — 분석 결과(부기·피부톤·비대칭)에 맞춰 케어 제품을 추천합니다.</p>'
         + '<p><b>어떻게</b> — 부기·붉은기·밝기·비대칭 점수를 기준으로 알맞은 제품을 앞쪽에 배치해 최대 5개까지 골라 보여줘요.</p>' },
+    headcad: { match: ['맞춤 괄사 헤드', '헤드 도면'], title: '맞춤 괄사 헤드 도면(CAD)',
+      body: '<p><b>무엇</b> — 얼굴 스캔에서 <b>턱선 윤곽</b>을 뽑아, 그 사람 턱에 맞는 괄사 <b>헤드 곡선 도면(DXF)</b>을 만듭니다.</p>'
+        + '<p><b>어떻게</b> — ① 얼굴 윤곽(하관 21점) 추출 + 롤 보정(똑바로) ② 두 눈 사이 거리(평균 63mm)로 <b>mm 환산</b> ③ 턱선(접촉면)+바깥 몸통선으로 헤드 외곽 생성 ④ 최소 DXF(R12, 레이어 JAW_CONTACT·HEAD_BODY)로 출력 + 미리보기 페이지.</p>'
+        + '<p><b>측정값</b> — 턱 폭·턱 높이·턱끝 곡률 반경(mm). ※ 스케일은 평균 동공간거리 기준 1차 도면 — 정밀 제작 전 참고용. 갤러리 카드의 "📐 맞춤 헤드 도면"에서 열람·DXF 다운로드.</p>' },
     aiverify: { match: ['__none_aiverify'], title: 'AI 정확도 검증 종합 리포트',
       body: '<p><b>무엇</b> — 검출·정확도·Zone·동일인·재현성·실사용 지표를 한 페이지(/validation)에 모아 <b>종합 신뢰도</b>를 보여줍니다.</p>'
         + '<p><b>어떻게</b> — 정답을 만들 수 있는 합성 평가셋 + 실제 사용 기록으로 실측. 종합 94점.</p>' },
@@ -919,6 +924,7 @@
     coldstart: [{ d: '06-22', t: '서버 깨우기 대기 + 분석 자동 재시도' }],
     loginhist: [{ d: '06-23', t: '로그인 계정 히스토리 페이지(/logins) 추가' }],
     aiverify: [{ d: '06-26', t: '종합 검증 리포트(/validation) + 동일인 인식률 — 종합 94점' }],
+    headcad: [{ d: '07-08', t: '얼굴 턱선 윤곽→mm 환산→헤드 곡선 도면(DXF)+미리보기 페이지+갤러리 버튼 (1차 도면)' }],
     dbsafe: [
       { d: '06-26', t: 'DB 연결 with 전환 + 전역 예외 핸들러' },
       { d: '06-26', t: '분석 항목별 부분 실패 허용(한 항목 실패해도 나머지 정상)' }
@@ -1058,7 +1064,7 @@
   // ── 개발 현황(영역별 탭) ──
   // 완료 항목은 키(DETAILS/HISTORY)로 묶고, 클릭 시 변경 히스토리 팝업. 할 일은 카테고리+설명.
   var AREAS = [
-    { id: 'backend', label: '🤖 백엔드·AI엔진', keys: ['landmark', 'pose', 'angle', 'light', 'ground', 'wrinkleage', 'wrinklestab', 'sameperson', 'repro', 'acc', 'zone', 'perf', 'reco', 'aiverify', 'dbsafe'] },
+    { id: 'backend', label: '🤖 백엔드·AI엔진', keys: ['landmark', 'pose', 'angle', 'light', 'ground', 'wrinkleage', 'wrinklestab', 'sameperson', 'headcad', 'repro', 'acc', 'zone', 'perf', 'reco', 'aiverify', 'dbsafe'] },
     { id: 'frontend', label: '📱 프론트(앱)', keys: ['loginui', 'basisapp', 'quality', 'incamera', 'calib', 'app3d', 'faceregion', 'kakao', 'naver', 'google', 'consent', 'facecrop', 'upload', 'coldstart'] },
     { id: 'infra', label: '🛠️ 인프라·운영', keys: ['dashboard', 'loginhist', 'gallery', 'postgres'] },
     { id: 'todo', label: '📋 할 일·예정' }
