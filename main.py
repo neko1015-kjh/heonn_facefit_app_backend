@@ -776,16 +776,18 @@ def _guide_check(raw):
     cy = (min(ys) + max(ys)) / 2          # 얼굴 중심(세로, 0~1)
     fw = max(xs) - min(xs)                # 얼굴 너비 비율
     pose = _estimate_head_pose(result)
+    yaw = round(pose["yaw"], 1) if pose else None      # 좌우 고개 각도(다중뷰 가이드용)
+    pitch = round(pose["pitch"], 1) if pose else None
     # 위치·크기·정면 순서로 가장 중요한 안내 하나를 고릅니다.
     if fw < 0.42:
-        return {"detected": True, "ok": False, "hint": "조금 더 가까이 와주세요"}
+        return {"detected": True, "ok": False, "hint": "조금 더 가까이 와주세요", "yaw": yaw, "pitch": pitch}
     if fw > 0.92:
-        return {"detected": True, "ok": False, "hint": "조금 더 멀리 떨어져 주세요"}
+        return {"detected": True, "ok": False, "hint": "조금 더 멀리 떨어져 주세요", "yaw": yaw, "pitch": pitch}
     if abs(cx - 0.5) > 0.16 or abs(cy - 0.5) > 0.17:
-        return {"detected": True, "ok": False, "hint": "얼굴을 타원 가운데로 맞춰주세요"}
+        return {"detected": True, "ok": False, "hint": "얼굴을 타원 가운데로 맞춰주세요", "yaw": yaw, "pitch": pitch}
     if pose is not None and (abs(pose["yaw"]) > MAX_YAW or abs(pose["pitch"]) > MAX_PITCH):
-        return {"detected": True, "ok": False, "hint": "정면을 바라봐 주세요"}
-    return {"detected": True, "ok": True, "hint": "좋아요! 이대로 촬영하세요"}
+        return {"detected": True, "ok": False, "hint": "정면을 바라봐 주세요", "yaw": yaw, "pitch": pitch}
+    return {"detected": True, "ok": True, "hint": "좋아요! 이대로 촬영하세요", "yaw": yaw, "pitch": pitch}
 
 
 @app.post("/scan/guide")
@@ -3221,6 +3223,33 @@ def head_build_form():
 <h1>HeOnn 맞춤 헤드 도면 만들기</h1>
 <div class="sub">3D 스캔 파일(가장 정확) 또는 사진(정면+좌/우)으로 헤드 CAD를 만듭니다</div>
 
+<div class="card">
+  <h2>📸 사진 촬영 가이드 <span class="tag">정확도↑</span></h2>
+  <p>좌/우는 <b>고개를 약 30°</b>씩만 돌려주세요(완전 옆모습 X — 얼굴이 인식돼야 함). 3장 모두 <b>같은 거리·같은 높이</b>, 얼굴을 세우고, 턱선이 머리카락에 가리지 않게, 밝은 곳에서.</p>
+  <svg width="100%" height="120" viewBox="0 0 360 120" style="background:#0d0d10;border-radius:10px;margin-top:6px">
+    <g transform="translate(60,60)">
+      <ellipse cx="0" cy="0" rx="26" ry="34" fill="none" stroke="#fbbf24" stroke-width="2"/>
+      <circle cx="-9" cy="-6" r="2.5" fill="#fbbf24"/><circle cx="9" cy="-6" r="2.5" fill="#fbbf24"/>
+      <line x1="0" y1="-2" x2="0" y2="8" stroke="#a1a1aa"/>
+      <text x="0" y="54" fill="#f4f4f5" font-size="12" text-anchor="middle">정면</text>
+    </g>
+    <g transform="translate(180,60)">
+      <ellipse cx="0" cy="0" rx="20" ry="34" fill="none" stroke="#34d399" stroke-width="2"/>
+      <circle cx="-10" cy="-6" r="2.5" fill="#34d399"/><circle cx="4" cy="-6" r="2.5" fill="#34d399"/>
+      <path d="M20 0 q14 0 22 0" stroke="#34d399" fill="none" marker-end="url(#ar)"/>
+      <text x="0" y="54" fill="#f4f4f5" font-size="12" text-anchor="middle">왼쪽 30°</text>
+    </g>
+    <g transform="translate(300,60)">
+      <ellipse cx="0" cy="0" rx="20" ry="34" fill="none" stroke="#34d399" stroke-width="2"/>
+      <circle cx="-4" cy="-6" r="2.5" fill="#34d399"/><circle cx="10" cy="-6" r="2.5" fill="#34d399"/>
+      <path d="M-20 0 q-14 0 -22 0" stroke="#34d399" fill="none" marker-end="url(#ar)"/>
+      <text x="0" y="54" fill="#f4f4f5" font-size="12" text-anchor="middle">오른쪽 30°</text>
+    </g>
+    <defs><marker id="ar" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6z" fill="#34d399"/></marker></defs>
+  </svg>
+  <p style="margin-top:8px">※ <b>3D 스캔 파일</b>이 있으면 가장 정확해요(방향 자동 정렬). 앱 최신 버전에선 <b>정면·좌·우 자동 촬영 가이드</b>로 3장을 한 번에 찍을 수 있어요.</p>
+</div>
+
 <form class="card" method="post" action="/head/build" enctype="multipart/form-data">
   <h2>① 3D 스캔 파일 <span class="tag">가장 정확 (실척 mm)</span></h2>
   <p>아이폰 Pro LiDAR 등으로 스캔한 <b>.obj / .ply / .stl</b>(ASCII·바이너리 모두). 방향이 달라도 <b>자동 정렬</b>됩니다.</p>
@@ -3301,6 +3330,36 @@ async def head_build(mesh: UploadFile = File(None), front: UploadFile = File(Non
     except Exception as e:
         print("헤드 빌드 실패:", e)
         return _head_err("처리 중 오류가 발생했어요. 파일을 확인해 다시 시도해주세요.")
+
+
+# 앱용 — 사진(정면+좌/우)으로 헤드 CAD 생성 → 측정값 + DXF(base64) JSON 반환
+@app.post("/head/build.json")
+async def head_build_json(front: UploadFile = File(...), left: UploadFile = File(None),
+                          right: UploadFile = File(None), head_mm: float = Form(75.0),
+                          ipd_mm: float = Form(63.0), mount_w: float = Form(20.0),
+                          hole_gap: float = Form(28.0), hole_d: float = Form(5.0),
+                          head_width: float = Form(22.0), thickness: float = Form(8.0)):
+    try:
+        f = await front.read()
+        lf = await left.read() if (left and getattr(left, "filename", "")) else None
+        rt = await right.read() if (right and getattr(right, "filename", "")) else None
+        jr = _jaw2d_from_photos(f, lf, rt, ipd_mm)
+        if jr is None:
+            return {"ok": False, "message": "정면 사진에서 얼굴/턱선을 찾지 못했어요."}
+        jaw, chin, used = jr
+        cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=f"사진 {len(used)}장 ({'·'.join(used)})",
+                               mount_w=mount_w, hole_gap=hole_gap, hole_d=hole_d,
+                               head_width=head_width, thickness=thickness)
+        if cad is None:
+            return {"ok": False, "message": "헤드 도면 생성에 실패했어요."}
+        dxf = _cad_to_dxf(cad)
+        keys = ("arc_len", "radius", "min_radius", "chord", "sagitta", "head_width", "thickness", "mount_w", "hole_gap", "hole_d")
+        return {"ok": True, "views_used": used,
+                "measurements": {k: cad[k] for k in keys},
+                "dxf_base64": base64.b64encode(dxf.encode("utf-8")).decode("ascii")}
+    except Exception as e:
+        print("헤드 빌드(JSON) 실패:", e)
+        return {"ok": False, "message": "처리 중 오류가 발생했어요."}
 
 
 # 저장된 이력을 최신순으로 돌려줍니다. (로그인한 사용자의 기록만)
