@@ -2681,8 +2681,9 @@ def _circle_r_from_3(a, b, c):
     return math.hypot(ax - ux, ay - uy)
 
 
-def _jaw_cad(raw):
-    """저장된 사진 → 턱선 윤곽(mm) + 측정값 + 헤드 외곽선. 실패 시 None."""
+def _jaw_cad(raw, head_mm=75.0, ipd_mm=63.0):
+    """저장된 사진 → 턱선에 1:1 밀착하는 '헤드'(디바이스 접촉부) 설계. 실패 시 None.
+    head_mm: 헤드 접촉 곡선 길이(디바이스 크기) / ipd_mm: 스케일 기준(눈 사이 거리, 실측 보정)."""
     try:
         image = cv2.imdecode(np.frombuffer(bytes(raw), np.uint8), cv2.IMREAD_COLOR)
         if image is None:
@@ -2711,34 +2712,60 @@ def _jaw_cad(raw):
         ipd_px = math.hypot(le[0] - re_[0], le[1] - re_[1])
         if ipd_px < 1:
             return None
-        mm = _AVG_IPD_MM / ipd_px  # px → mm
+        mm = float(ipd_mm) / ipd_px  # px → mm
 
-        # 턱선 점(mm). 턱끝(152)을 원점(0,0)으로, y는 위로 증가하게.
-        chin = P(152)
-        inner = [((P(i)[0] - chin[0]) * mm, -(P(i)[1] - chin[1]) * mm) for i in _JAW_IDS]
+        # 턱선 전체 점(mm, y 위로). 순서: 왼귀 … 턱끝(152) … 오른귀
+        jaw = [(P(i)[0] * mm, -P(i)[1] * mm) for i in _JAW_IDS]
+        chin_idx = _JAW_IDS.index(152)
 
-        # 헤드 외곽선: 접촉 곡선(inner)에서 곡선 중심 반대쪽(바깥)으로 두께만큼 offset
-        cx = sum(p[0] for p in inner) / len(inner)
-        cy = sum(p[1] for p in inner) / len(inner)
-        outer = []
-        for (x, y) in inner:
-            dx, dy = x - cx, y - cy
-            d = math.hypot(dx, dy) or 1.0
-            outer.append((x + dx / d * _HEAD_OFFSET_MM, y + dy / d * _HEAD_OFFSET_MM))
+        # 턱끝에서 한쪽(하관)으로 head_mm 만큼 호를 따라 걸어 '접촉 구간'을 뽑습니다(1:1 밀착).
+        seg = [jaw[chin_idx]]
+        acc = 0.0
+        i = chin_idx
+        while i + 1 < len(jaw) and acc < head_mm:
+            x0, y0 = jaw[i]; x1, y1 = jaw[i + 1]
+            d = math.hypot(x1 - x0, y1 - y0)
+            if d < 1e-6:
+                i += 1; continue
+            if acc + d >= head_mm:
+                t = (head_mm - acc) / d
+                seg.append((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)); acc = head_mm
+            else:
+                seg.append((x1, y1)); acc += d
+            i += 1
+        if len(seg) < 3:
+            return None
 
-        xs = [p[0] for p in inner]; ys = [p[1] for p in inner]
-        jaw_width = round(max(xs) - min(xs), 1)
-        jaw_height = round(max(ys) - min(ys), 1)
-        # 턱끝 곡률 반경(턱끝 좌·중·우 근방 3점)
-        chin_r = round(_circle_r_from_3(
-            ((P(176)[0] - chin[0]) * mm, -(P(176)[1] - chin[1]) * mm),
-            (0.0, 0.0),
-            ((P(400)[0] - chin[0]) * mm, -(P(400)[1] - chin[1]) * mm),
-        ), 1)
+        # 현(chord) 기준으로 회전·이동: 현을 x축에, 오목이 위로(∪) 열리게 정규화
+        sx, sy = seg[0]; ex, ey = seg[-1]
+        chord = math.hypot(ex - sx, ey - sy)
+        ang = math.atan2(ey - sy, ex - sx)
+        cA, sA = math.cos(-ang), math.sin(-ang)
+        norm = []
+        for (x, y) in seg:
+            dx, dy = x - sx, y - sy
+            norm.append((dx * cA - dy * sA - chord / 2, dx * sA + dy * cA))
+        if norm[len(norm) // 2][1] > 0:  # 가운데가 위로 솟으면 뒤집어 ∪ 모양으로
+            norm = [(x, -y) for (x, y) in norm]
+
+        # 측정값
+        sagitta = round(max(abs(y) for (_, y) in norm), 1)                     # 오목 깊이
+        R_fit = round(_circle_r_from_3(norm[0], norm[len(norm) // 2], norm[-1]), 1)  # 대표 곡률 반경
+        min_r = 99999.0
+        for a3, b3, c3 in zip(norm, norm[1:], norm[2:]):
+            r = _circle_r_from_3(a3, b3, c3)
+            if r < min_r:
+                min_r = r
+        min_r = round(min_r, 1)                                                # 최대 굴곡(최소 반경)
+
+        # 헤드 몸통: 접촉선(위 ∪)에서 아래로 두께만큼 offset한 하단선(얕은 호 근사)
+        T = _HEAD_OFFSET_MM
+        body = [(x, y - T) for (x, y) in norm]
         return {
-            "inner": inner, "outer": outer,
-            "jaw_width": jaw_width, "jaw_height": jaw_height,
-            "chin_radius": chin_r, "offset": _HEAD_OFFSET_MM,
+            "contact": norm, "body": body,
+            "arc_len": round(head_mm, 1), "chord": round(chord, 1), "sagitta": sagitta,
+            "radius": R_fit, "min_radius": min_r, "thickness": T,
+            "ipd_mm": round(float(ipd_mm), 1),
         }
     except Exception as e:
         print("헤드 도면 생성 실패:", e)
@@ -2759,18 +2786,22 @@ def _cad_to_dxf(cad):
         for i in range(len(pts) - 1):
             line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], layer)
 
-    inner, outer = cad["inner"], cad["outer"]
-    polyline(inner, "JAW_CONTACT")   # 접촉 곡선(턱선에 닿는 면)
-    polyline(outer, "HEAD_BODY")     # 헤드 몸통 바깥선
-    # 양 끝 연결(닫힌 헤드 외곽)
-    line(inner[0][0], inner[0][1], outer[0][0], outer[0][1], "HEAD_BODY")
-    line(inner[-1][0], inner[-1][1], outer[-1][0], outer[-1][1], "HEAD_BODY")
+    contact, body_pts = cad["contact"], cad["body"]
+    polyline(contact, "HEAD_CONTACT")   # 얼굴(턱선)에 닿는 오목 접촉면
+    polyline(body_pts, "HEAD_BODY")     # 헤드 몸통 바깥선
+    # 양 끝 연결(닫힌 헤드 단면)
+    line(contact[0][0], contact[0][1], body_pts[0][0], body_pts[0][1], "HEAD_BODY")
+    line(contact[-1][0], contact[-1][1], body_pts[-1][0], body_pts[-1][1], "HEAD_BODY")
     # 치수·정보 텍스트
-    top = max(p[1] for p in outer) + 8
-    text(-cad["jaw_width"] / 2, top + 12, 5, "HeOnn FaceFit - custom head (mm)", "NOTE")
-    text(-cad["jaw_width"] / 2, top, 4, f"jaw width={cad['jaw_width']}  height={cad['jaw_height']}  chin R={cad['chin_radius']}  body={cad['offset']}", "NOTE")
-    body = "".join(ent)
-    return "0\nSECTION\n2\nENTITIES\n" + body + "0\nENDSEC\n0\nEOF\n"
+    left = -cad["chord"] / 2
+    bottom = min(p[1] for p in body_pts) - 8
+    text(left, bottom, 4.5, "HeOnn FaceFit custom head (mm)", "NOTE")
+    text(left, bottom - 7, 3.5,
+         f"contact arc={cad['arc_len']} chord={cad['chord']} depth={cad['sagitta']} "
+         f"R={cad['radius']} minR={cad['min_radius']} thickness={cad['thickness']} (ipd={cad['ipd_mm']})",
+         "NOTE")
+    dxf_body = "".join(ent)
+    return "0\nSECTION\n2\nENTITIES\n" + dxf_body + "0\nENDSEC\n0\nEOF\n"
 
 
 def _load_scan_image(scan_id):
@@ -2779,13 +2810,13 @@ def _load_scan_image(scan_id):
     return bytes(row[0]) if row and row[0] is not None else None
 
 
-# 헤드 도면(DXF) 다운로드
+# 헤드 도면(DXF) 다운로드. head_mm=헤드 크기, ipd_mm=스케일 실측 보정
 @app.get("/scan/{scan_id}/head.dxf")
-def scan_head_dxf(scan_id: int):
+def scan_head_dxf(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0):
     raw = _load_scan_image(scan_id)
     if raw is None:
         return Response(status_code=404)
-    cad = _jaw_cad(raw)
+    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm)
     if cad is None:
         return Response(content="얼굴/턱선을 찾지 못했습니다.", status_code=422)
     dxf = _cad_to_dxf(cad)
@@ -2795,30 +2826,31 @@ def scan_head_dxf(scan_id: int):
     )
 
 
-# 헤드 도면 미리보기 페이지 (턱선 곡선 + 측정값 + DXF 다운로드)
+# 헤드 도면 미리보기 페이지 (헤드 접촉 곡선 + 측정값 + 사용법 + DXF 다운로드)
+# ?head_mm=75 : 헤드(금색 접촉부) 크기 / ?ipd_mm=63 : 스케일 기준(눈 사이 실측으로 보정)
 @app.get("/scan/{scan_id}/head", response_class=HTMLResponse)
-def scan_head_page(scan_id: int):
+def scan_head_page(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0):
     raw = _load_scan_image(scan_id)
     if raw is None:
         return HTMLResponse("<p style='color:#fff;background:#09090b;padding:40px'>사진을 찾을 수 없습니다.</p>", status_code=404)
-    cad = _jaw_cad(raw)
+    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm)
     if cad is None:
         return HTMLResponse("<p style='color:#fff;background:#09090b;padding:40px'>이 사진에서 얼굴/턱선을 찾지 못했어요.</p>", status_code=422)
 
-    # SVG 미리보기: 전체(inner+outer) 경계에 맞춰 스케일, 화면 y는 아래로 증가 → 뒤집기
-    allpts = cad["inner"] + cad["outer"]
+    # SVG 미리보기: 헤드 단면(접촉선 ∪ + 몸통) 경계에 맞춰 스케일
+    allpts = cad["contact"] + cad["body"]
     minx = min(p[0] for p in allpts); maxx = max(p[0] for p in allpts)
     miny = min(p[1] for p in allpts); maxy = max(p[1] for p in allpts)
-    W, H = 380, 380
-    pad = 30
-    span = max(maxx - minx, maxy - miny) or 1
-    s = (min(W, H) - pad * 2) / span
+    W, H = 380, 300
+    pad = 34
+    span = max(maxx - minx, (maxy - miny) or 1)
+    s = (W - pad * 2) / (span or 1)
     def sx(x): return pad + (x - minx) * s
-    def sy(y): return H - (pad + (y - miny) * s)  # 위가 위로
+    def sy(y): return H - pad - (y - miny) * s
     def path(pts):
         return " ".join((("M" if i == 0 else "L") + f"{sx(x):.1f} {sy(y):.1f}") for i, (x, y) in enumerate(pts))
-    inner_d = path(cad["inner"])
-    outer_d = path(cad["outer"])
+    contact_d = path(cad["contact"])
+    body_d = path(cad["body"])
 
     html = f"""<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -2827,32 +2859,41 @@ def scan_head_page(scan_id: int):
   body {{ margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px; }}
   h1 {{ color:#fbbf24; font-size:20px; text-align:center; }}
   .sub {{ color:#a1a1aa; font-size:13px; text-align:center; margin-bottom:18px; }}
-  .card {{ max-width:440px; margin:0 auto; background:#18181b; border:1px solid #27272a; border-radius:16px; padding:18px; }}
+  .card {{ max-width:460px; margin:0 auto; background:#18181b; border:1px solid #27272a; border-radius:16px; padding:18px; }}
   svg {{ display:block; margin:0 auto; background:#0d0d10; border-radius:12px; }}
   table {{ width:100%; border-collapse:collapse; margin-top:16px; font-size:14px; }}
   td {{ padding:8px 6px; border-bottom:1px solid #27272a; }}
   td.k {{ color:#a1a1aa; }} td.v {{ color:#fcd34d; text-align:right; font-weight:700; }}
   .dl {{ display:block; text-align:center; margin-top:18px; background:#f59e0b; color:#09090b; font-weight:700; padding:13px; border-radius:12px; text-decoration:none; }}
   .note {{ color:#71717a; font-size:11.5px; line-height:1.6; margin-top:14px; }}
+  .use {{ background:#0d0d10; border:1px solid #27272a; border-radius:12px; padding:12px 14px; margin-top:16px; font-size:12.5px; color:#a1a1aa; line-height:1.7; }}
+  .use b {{ color:#fcd34d; }}
   .lg {{ display:flex; gap:16px; justify-content:center; font-size:12px; color:#a1a1aa; margin-top:8px; }}
   .lg i {{ width:18px; height:0; border-top:3px solid; display:inline-block; vertical-align:middle; margin-right:5px; }}
+  a {{ color:#fcd34d; }}
 </style></head><body>
-<h1>HeOnn 맞춤 괄사 헤드 도면</h1>
-<div class="sub">얼굴 턱선 윤곽을 측정해 만든 1차 헤드 곡선입니다</div>
+<h1>HeOnn 1:1 맞춤 괄사 헤드 도면</h1>
+<div class="sub">턱선에 밀착하도록 설계한 헤드(금색 접촉부) 단면입니다</div>
 <div class="card">
   <svg width="{W}" height="{H}" viewBox="0 0 {W} {H}">
-    <path d="{outer_d}" fill="none" stroke="#d97706" stroke-width="2" stroke-dasharray="5 4"/>
-    <path d="{inner_d}" fill="none" stroke="#fbbf24" stroke-width="3"/>
+    <path d="{body_d}" fill="rgba(245,158,11,0.10)" stroke="#d97706" stroke-width="2"/>
+    <path d="{contact_d}" fill="none" stroke="#fbbf24" stroke-width="3.5"/>
   </svg>
-  <div class="lg"><span><i style="border-color:#fbbf24"></i>턱선 접촉면</span><span><i style="border-color:#d97706;border-top-style:dashed"></i>헤드 몸통</span></div>
+  <div class="lg"><span><i style="border-color:#fbbf24"></i>턱선 접촉면(오목)</span><span><i style="border-color:#d97706"></i>헤드 몸통</span></div>
   <table>
-    <tr><td class="k">턱 폭 (좌우)</td><td class="v">{cad['jaw_width']} mm</td></tr>
-    <tr><td class="k">턱 높이 (턱끝~귀높이)</td><td class="v">{cad['jaw_height']} mm</td></tr>
-    <tr><td class="k">턱끝 곡률 반경 R</td><td class="v">{cad['chin_radius']} mm</td></tr>
-    <tr><td class="k">헤드 몸통 두께</td><td class="v">{cad['offset']} mm</td></tr>
+    <tr><td class="k">헤드 접촉 곡선 길이(디바이스)</td><td class="v">{cad['arc_len']} mm</td></tr>
+    <tr><td class="k">곡률 반경 R (밀착 기준)</td><td class="v">{cad['radius']} mm</td></tr>
+    <tr><td class="k">최대 굴곡(최소 반경)</td><td class="v">{cad['min_radius']} mm</td></tr>
+    <tr><td class="k">현(chord) 길이</td><td class="v">{cad['chord']} mm</td></tr>
+    <tr><td class="k">오목 깊이(sagitta)</td><td class="v">{cad['sagitta']} mm</td></tr>
+    <tr><td class="k">헤드 몸통 두께</td><td class="v">{cad['thickness']} mm</td></tr>
   </table>
-  <a class="dl" href="/scan/{scan_id}/head.dxf">📐 CAD 도면(DXF) 내려받기</a>
-  <div class="note">※ 스케일은 <b>평균 동공 간 거리 63mm</b> 기준 환산값입니다(정밀 제작 전 1차 도면). DXF는 AutoCAD·Fusion360·온라인 뷰어에서 열 수 있어요. 레이어: JAW_CONTACT(접촉면)·HEAD_BODY(몸통).</div>
+  <a class="dl" href="/scan/{scan_id}/head.dxf?head_mm={cad['arc_len']}&ipd_mm={cad['ipd_mm']}">📐 CAD 도면(DXF) 내려받기</a>
+  <div class="use">
+    <b>사용법(턱선 괄사)</b> — 오목한 접촉면에 턱뼈를 끼우고, <b>턱끝 → 귀 방향</b>으로 턱선을 따라 쓸어 올립니다(한쪽 5~7회). 피부에 <b>약 15~45°</b>로 거의 눕혀 밀착. 이 헤드는 그 사람 턱선 곡률(R {cad['radius']}mm)에 맞춰 오목하게 설계돼 밀착됩니다.
+    <br/>참고: <a href="https://www.nuebiome.com/blogs/the-bioferment-blog/how-to-use-gua-sha-for-a-defined-jawline-an-estheticians-guide" target="_blank" rel="noopener">Nuebiome</a> · <a href="https://www.aiam.edu/massage-therapy/how-to-use-gua-sha/" target="_blank" rel="noopener">AIAM</a>
+  </div>
+  <div class="note">※ 스케일은 <b>눈 사이 거리 {cad['ipd_mm']}mm</b> 기준 환산(1차 도면). 실측 보정: 주소 끝에 <code>?ipd_mm=본인눈사이mm</code> 또는 <code>?head_mm=헤드크기</code>. 3D 스캐너 실측값이 있으면 그 값으로 넣으면 정확해집니다. DXF 레이어: HEAD_CONTACT(접촉면)·HEAD_BODY(몸통).</div>
 </div>
 </body></html>"""
     return HTMLResponse(html)
