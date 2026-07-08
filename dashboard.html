@@ -465,6 +465,7 @@
     <div class="road-item"><span class="ck">•</span><span class="t">헤드 CAD v2 — 얼굴 전체가 아닌 <b>디바이스 헤드(75mm 접촉부) 1:1 밀착</b> 설계로 개선(곡률R·최대굴곡 측정 · 스케일 실측보정 · 턱선 괄사 사용법 반영)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">헤드 CAD v3 + <b>A+B 입력</b> — 접촉 곡선 기준·평면 외곽·본체 결합부 정확화 / <b>3D 스캔 파일(.obj·ply) 업로드</b>(실척)·<b>사진 정면+좌우 다중</b> 지원. 업로드 도구 <code>/head/build</code></span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">헤드 CAD 고도화 — <b>바이너리 PLY/STL</b> 지원 + <b>PCA 3D 자동 정렬</b>(임의 방향 스캔 OK) + <b>본체 결합부 실측 파라미터</b>(돌기폭·구멍간격·구멍경·헤드폭·두께)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">맞춤 헤드 <b>촬영 가이드 A+B</b> — (A, 앱) 인앱 카메라 <b>다중뷰(정면·좌·우) 각도 안내 + 자동 촬영</b> → 측정값·도면(DXF) 저장 <span class="tag tag-live">앱 다음 빌드 반영</span> / (B, 웹) <code>/head/build</code>에 촬영 포즈 그림·팁 카드. 서버: <code>/scan/guide</code> yaw 추가 + 앱용 <code>/head/build.json</code></span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">2026-07-01</h3>
@@ -845,7 +846,8 @@
       body: '<p><b>무엇</b> — 얼굴 턱선에 <b>1:1 밀착</b>하는 디바이스 <b>헤드(금색 접촉부) 설계도(DXF)</b>를 만듭니다. (얼굴 전체 윤곽이 아니라 헤드 부분만)</p>'
         + '<p><b>어떻게</b> — ① 턱선에서 턱끝→하관으로 <b>헤드 크기(기본 75mm)</b> 만큼 호를 따라 접촉 구간 추출(롤 보정) ② 눈 사이 거리로 mm 환산(실측 보정 가능) ③ 그 사람 곡률에 맞춘 <b>오목 접촉면 + 몸통</b> 단면 생성 ④ DXF(레이어 HEAD_CONTACT·HEAD_BODY)+미리보기.</p>'
         + '<p><b>입력</b> — ① 사진(정면+좌/우 다중, 뷰 평균) ② <b>3D 스캔 파일(.obj·PLY·STL, ASCII/바이너리)</b> 업로드(실척, 가장 정확) — <b>PCA 자동 정렬</b>로 임의 방향 스캔도 처리. 업로드 도구 <code>/head/build</code>.</p>'
-        + '<p><b>측정·파라미터</b> — 접촉 곡선 길이·곡률 R·최대 굴곡·현·깊이. <code>head_mm</code>(헤드 크기)·<code>ipd_mm</code>(스케일 보정) + <b>본체 결합부 실측</b>(<code>mount_w·hole_gap·hole_d·head_width·thickness</code>)으로 디바이스와 합체. 턱선 괄사 사용법(턱끝→귀·15~45°) 반영.</p>' },
+        + '<p><b>측정·파라미터</b> — 접촉 곡선 길이·곡률 R·최대 굴곡·현·깊이. <code>head_mm</code>(헤드 크기)·<code>ipd_mm</code>(스케일 보정) + <b>본체 결합부 실측</b>(<code>mount_w·hole_gap·hole_d·head_width·thickness</code>)으로 디바이스와 합체. 턱선 괄사 사용법(턱끝→귀·15~45°) 반영.</p>'
+        + '<p><b>촬영 가이드(A+B)</b> — (A, 앱) 인앱 카메라가 <b>정면→좌→우</b>를 고개 각도(yaw)로 안내하고 <b>3·2·1 자동 촬영</b> → 3장을 서버로 보내(<code>/head/build.json</code>) 측정값·도면(DXF)을 앱에서 바로 저장. (B, 웹) <code>/head/build</code>에 촬영 포즈 그림·팁 카드(같은 거리·높이·정자세·턱 가리지 않기·밝은 곳). <span style="opacity:.75">앱 A는 다음 빌드에 반영.</span></p>' },
     aiverify: { match: ['__none_aiverify'], title: 'AI 정확도 검증 종합 리포트',
       body: '<p><b>무엇</b> — 검출·정확도·Zone·동일인·재현성·실사용 지표를 한 페이지(/validation)에 모아 <b>종합 신뢰도</b>를 보여줍니다.</p>'
         + '<p><b>어떻게</b> — 정답을 만들 수 있는 합성 평가셋 + 실제 사용 기록으로 실측. 종합 94점.</p>' },
@@ -943,7 +945,8 @@
       { d: '07-08', t: 'v2 — 턱선 전체 대신 디바이스 헤드(75mm 접촉부) 1:1 밀착 설계로 개선. 곡률R·최대굴곡 측정 + 스케일 실측보정(ipd_mm)·헤드크기(head_mm) 파라미터 + 턱선 괄사 사용법 반영' },
       { d: '07-08', t: 'v3 — 얼굴에 대고 마사지하는 접촉 곡선 기준으로 재정의 + 헤드 평면 외곽(초승달형)·본체 결합부(돌기+나사구멍 2개)까지 정확화(디바이스 본체와 합체) + 미리보기/DXF 수정' },
       { d: '07-08', t: 'A+B 입력 — 3D 스캔 파일(.obj/ASCII PLY, 실척) 업로드 + 사진(정면+좌/우 다중, 뷰 평균) 지원. /head/build 업로드 도구' },
-      { d: '07-08', t: '고도화 — 바이너리 PLY/STL 파서 추가 + PCA 3D 자동 정렬(임의 방향 스캔 OK) + 본체 결합부 실측 파라미터(돌기폭·구멍간격·구멍경·헤드폭·두께)' }
+      { d: '07-08', t: '고도화 — 바이너리 PLY/STL 파서 추가 + PCA 3D 자동 정렬(임의 방향 스캔 OK) + 본체 결합부 실측 파라미터(돌기폭·구멍간격·구멍경·헤드폭·두께)' },
+      { d: '07-08', t: '촬영 가이드 A+B — (A,앱) 인앱 카메라 다중뷰(정면·좌·우) yaw 각도 안내 + 3·2·1 자동촬영 → /head/build.json으로 측정값·DXF 받아 앱에서 저장(앱 다음 빌드 반영) / (B,웹) /head/build 촬영 포즈 그림·팁 카드. 서버 /scan/guide에 yaw 추가' }
     ],
     dbsafe: [
       { d: '06-26', t: 'DB 연결 with 전환 + 전역 예외 핸들러' },
