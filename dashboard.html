@@ -603,8 +603,8 @@
     <div class="road-item mock-item" onclick="openMock('design')"><span class="ck">🎨</span><span class="t">디자인 시스템 — 색·타이포·컴포넌트 <span class="sub">통일된 색·글자 크기·버튼/칩/카드 규칙으로 일관성↑</span><span class="dhint">🖼️ 예상 화면 보기 ▸</span></span></div>
   </div>
 
-  <div class="section-title">📷 인앱 카메라 — 후속 개발·디자인 <span class="section-note">(코드 완료 · APK 빌드 대기 중)</span></div>
-  <div class="progress-text">"카메라 촬영"을 누르면 <b>앱 안에서 카메라가 켜지고</b>, 얼굴 가이드 타원 + 실시간 안내(정면·거리·위치)가 동작하도록 구현했어요. 코드는 완료됐고 <b>APK는 EAS 무료 빌드 한도가 리셋되는 7/1 이후</b> 생성합니다. 아래는 설치 후 다듬을 항목이에요.</div>
+  <div class="section-title">📷 인앱 카메라 — 후속 개발·디자인 <span class="section-note">(v17 반영 · 자동촬영·딤 완료)</span></div>
+  <div class="progress-text">"카메라 촬영"을 누르면 <b>앱 안에서 카메라가 켜지고</b>, 얼굴 가이드 타원 + 실시간 안내(정면·거리·위치) + <b>3·2·1 자동 촬영</b> + <b>타원 바깥 딤</b>이 동작합니다(<b>v17 APK</b>에 반영). 아래는 설치 후 다듬을 항목이에요.</div>
   <div class="road-group">
     <h3 class="rg-todo">🔴 실제 단말 테스트 (설치 후 필수)</h3>
     <div class="road-item"><span class="ck">🔴</span><span class="t">기종별 카메라 권한·전면 카메라·미리보기 동작 확인 <span class="sub">안드로이드 버전·제조사별 차이</span></span></div>
@@ -620,7 +620,23 @@
     <h3 class="rg-todo">🟡 성능·안정성</h3>
     <div class="road-item"><span class="ck">🟡</span><span class="t">가이드 프레임 임시파일 정리 <span class="sub">미리보기 캡처가 캐시에 쌓이지 않게 주기적 삭제</span></span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">데이터·배터리 최적화 <span class="sub">호출 주기(현재 1.5초)·화질 조정 / 향후 온디바이스 얼굴감지(무네트워크) 검토</span></span></div>
-    <div class="road-item"><span class="ck">🟡</span><span class="t">웹은 시스템 카메라 폴백(가이드 없음) 안내 <span class="sub">인앱 카메라는 휴대폰 앱 전용</span></span></div>
+  </div>
+
+  <div class="section-title">🚀 고도화 — 남은 기능 <span class="section-note">(향후 개선 로드맵)</span></div>
+  <div class="road-group">
+    <h3 class="rg-todo">📷 인앱 카메라 / 웹</h3>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">웹은 시스템 카메라 폴백(가이드 없음) 안내 <span class="sub">웹에서는 얼굴 가이드가 없는 시스템 카메라를 쓰므로, "실시간 가이드·자동촬영은 휴대폰 앱에서" 안내 문구를 띄워 혼동 방지</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">정렬 완료 시 햅틱(진동) 피드백 <span class="sub">타원에 얼굴이 맞으면 짧게 진동으로 알림</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">가이드 프레임 임시파일 정리 · 데이터/배터리 최적화 <span class="sub">캐시 주기 삭제, 호출 주기·화질 조정, 온디바이스 얼굴감지(무네트워크) 검토</span></span></div>
+  </div>
+  <div class="road-group">
+    <h3 class="rg-todo">🧊 3D 안면 스캔</h3>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">실사 피부 텍스처 매핑 <span class="sub">촬영한 얼굴 사진을 3D 메시에 입혀 실제 얼굴처럼 표현(현재는 청동 재질)</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">딥러닝 조밀 복원(3DDFA/DECA) <span class="sub">주름·표정까지 정밀 복원 — 단 BFM/FLAME <b>상용 라이선스 확보 후</b> 적용</span></span></div>
+  </div>
+  <div class="road-group">
+    <h3 class="rg-todo">🧭 기기 셋팅(위치 포인트)</h3>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">실제 BLE 센서 연동 <span class="sub">현재는 4단계 안내 흐름 — 기기 통신 프로토콜 확정 후 실제 포인트 데이터 수집으로 연결</span></span></div>
   </div>
 
   <div class="section-title">👤 운영 계정 <span class="section-note">(카드의 "열기"로 관리 페이지 바로 이동)</span></div>
