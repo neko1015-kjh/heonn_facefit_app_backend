@@ -7,6 +7,7 @@ import json
 import time
 import uuid
 import base64
+import struct
 import asyncio
 import threading
 import urllib.parse
@@ -2684,9 +2685,11 @@ def _circle_r_from_3(a, b, c):
     return math.hypot(ax - ux, ay - uy)
 
 
-def _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진"):
+def _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진",
+                     mount_w=None, hole_gap=28.0, hole_d=5.0, head_width=None, thickness=None):
     """정렬된 턱선 폴리라인(2D mm) → 헤드 설계(접촉 곡선·외곽·결합부·측정값). 실패 시 None.
-    jaw: (x,y) mm 리스트 / chin_idx: 턱끝 인덱스 / head_mm: 헤드 접촉 곡선 길이."""
+    jaw: (x,y) mm 리스트 / chin_idx: 턱끝 인덱스 / head_mm: 헤드 접촉 곡선 길이.
+    mount_w·hole_gap·hole_d·head_width·thickness: 디바이스 본체 결합부 실측치(없으면 기본값)."""
     if not jaw or len(jaw) < 3 or chin_idx is None:
         return None
     # 턱끝에서 한쪽(하관)으로 head_mm 만큼 호를 따라 걸어 '접촉 구간'을 뽑습니다(1:1 밀착).
@@ -2728,27 +2731,32 @@ def _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진"):
             min_r = r
     min_r = round(min_r, 1)
 
-    # 헤드 평면 외곽(초승달/렌즈형) + 본체 결합부(돌기 + 나사 구멍 2개)
-    Wt = _HEAD_WIDTH_MM
+    # 헤드 평면 외곽(초승달/렌즈형) + 본체 결합부(돌기 + 나사 구멍 2개) — 실측치 반영
+    Wt = float(head_width) if head_width else _HEAD_WIDTH_MM
+    thk = float(thickness) if thickness else _HEAD_THICK_MM
+    mw = float(mount_w) if mount_w else _MOUNT_W_MM
+    hg = float(hole_gap) if hole_gap else 28.0
+    hr = (float(hole_d) if hole_d else 5.0) / 2.0
     inner = [(x, y - Wt) for (x, y) in norm]
     base_y = min(p[1] for p in inner)
     band_mid = (norm[len(norm) // 2][1] + inner[len(inner) // 2][1]) / 2
-    mw, mh = _MOUNT_W_MM, 8.0
+    mh = 8.0
     mount_tongue = [(-mw / 2, base_y), (-mw / 2, base_y - mh), (mw / 2, base_y - mh), (mw / 2, base_y)]
-    mount_holes = [(-14.0, band_mid, 2.5), (14.0, band_mid, 2.5)]
+    mount_holes = [(-hg / 2, band_mid, hr), (hg / 2, band_mid, hr)]
     return {
         "contact": norm, "inner": inner,
         "mount_tongue": mount_tongue, "mount_holes": mount_holes,
         "arc_len": round(head_mm, 1), "chord": round(chord, 1), "sagitta": sagitta,
         "radius": R_fit, "min_radius": min_r,
-        "head_width": Wt, "thickness": _HEAD_THICK_MM, "mount_w": mw,
+        "head_width": round(Wt, 1), "thickness": round(thk, 1), "mount_w": round(mw, 1),
+        "hole_gap": round(hg, 1), "hole_d": round(hr * 2, 1),
         "ipd_mm": round(float(ipd_mm), 1), "source": source,
     }
 
 
-def _jaw_cad(raw, head_mm=75.0, ipd_mm=63.0):
+def _jaw_cad(raw, head_mm=75.0, ipd_mm=63.0, **mount):
     """저장된 사진 → 턱선에 1:1 밀착하는 '헤드'(디바이스 접촉부) 설계. 실패 시 None.
-    head_mm: 헤드 접촉 곡선 길이(디바이스 크기) / ipd_mm: 스케일 기준(눈 사이 거리, 실측 보정)."""
+    head_mm: 헤드 접촉 곡선 길이(디바이스 크기) / ipd_mm: 스케일 기준 / **mount: 본체 결합부 실측치."""
     try:
         image = cv2.imdecode(np.frombuffer(bytes(raw), np.uint8), cv2.IMREAD_COLOR)
         if image is None:
@@ -2782,7 +2790,7 @@ def _jaw_cad(raw, head_mm=75.0, ipd_mm=63.0):
         # 턱선 전체 점(mm, y 위로). 순서: 왼귀 … 턱끝(152) … 오른귀
         jaw = [(P(i)[0] * mm, -P(i)[1] * mm) for i in _JAW_IDS]
         chin_idx = _JAW_IDS.index(152)
-        return _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진")
+        return _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진", **mount)
     except Exception as e:
         print("헤드 도면 생성 실패:", e)
         return None
@@ -2844,38 +2852,9 @@ def _jaw2d_from_photos(front, left=None, right=None, ipd_mm=63.0):
     return avg, chin, used
 
 
-def _parse_mesh_vertices(data, name=""):
-    """OBJ / ASCII PLY 파일에서 정점 좌표 리스트를 파싱합니다. (바이너리 PLY 미지원)"""
-    try:
-        text = data.decode("utf-8", "ignore")
-    except Exception:
-        return []
+def _parse_obj(data):
     verts = []
-    low = (name or "").lower()
-    if low.endswith(".ply") or text.lstrip()[:3] == "ply":
-        if "format ascii" not in text[:2000]:
-            return []  # 바이너리 PLY는 아직 미지원
-        lines = text.splitlines()
-        count = 0; header_end = -1
-        for idx, ln in enumerate(lines):
-            s = ln.strip()
-            if s.startswith("element vertex"):
-                try:
-                    count = int(s.split()[-1])
-                except Exception:
-                    count = 0
-            if s == "end_header":
-                header_end = idx; break
-        for ln in lines[header_end + 1: header_end + 1 + count]:
-            p = ln.split()
-            if len(p) >= 3:
-                try:
-                    verts.append((float(p[0]), float(p[1]), float(p[2])))
-                except Exception:
-                    pass
-        return verts
-    # OBJ
-    for ln in text.splitlines():
+    for ln in data.decode("utf-8", "ignore").splitlines():
         if ln.startswith("v "):
             p = ln.split()
             if len(p) >= 4:
@@ -2884,6 +2863,140 @@ def _parse_mesh_vertices(data, name=""):
                 except Exception:
                     pass
     return verts
+
+
+def _parse_stl(data):
+    """ASCII/바이너리 STL 모두 지원 → 정점 리스트."""
+    # ASCII 판별: 앞부분에 'facet'/'vertex'가 있고 텍스트로 읽히면 ASCII
+    headtxt = data[:512].decode("ascii", "ignore").lower()
+    is_ascii = ("facet" in headtxt or "vertex" in headtxt) and not (len(data) > 84 and (len(data) - 84) % 50 == 0 and b"\x00" in data[:200])
+    if is_ascii:
+        verts = []
+        for ln in data.decode("ascii", "ignore").splitlines():
+            ln = ln.strip()
+            if ln.startswith("vertex"):
+                p = ln.split()
+                if len(p) >= 4:
+                    try:
+                        verts.append((float(p[1]), float(p[2]), float(p[3])))
+                    except Exception:
+                        pass
+        if verts:
+            return verts
+    # 바이너리 STL: 80바이트 헤더 + uint32 개수 + 삼각형당 50바이트(법선3 + 정점3×3 + 2)
+    if len(data) < 84:
+        return []
+    n = struct.unpack_from("<I", data, 80)[0]
+    n = min(n, (len(data) - 84) // 50)
+    verts = []
+    for i in range(n):
+        base = 84 + i * 50
+        v = struct.unpack_from("<12f", data, base)
+        verts.append((v[3], v[4], v[5])); verts.append((v[6], v[7], v[8])); verts.append((v[9], v[10], v[11]))
+    return verts
+
+
+def _parse_ply(data):
+    """ASCII / 바이너리(little·big) PLY → 정점 리스트."""
+    idx = data.find(b"end_header")
+    if idx < 0:
+        return []
+    header = data[:idx].decode("ascii", "ignore")
+    nl = data.find(b"\n", idx)
+    body_start = nl + 1
+    fmt = "ascii"
+    if "binary_little_endian" in header:
+        fmt = "<"
+    elif "binary_big_endian" in header:
+        fmt = ">"
+    count = 0; props = []; in_vertex = False
+    for ln in header.splitlines():
+        s = ln.strip().split()
+        if not s:
+            continue
+        if s[0] == "element":
+            in_vertex = (len(s) > 1 and s[1] == "vertex")
+            if in_vertex:
+                count = int(s[2])
+        elif s[0] == "property" and in_vertex and s[1] != "list":
+            props.append((s[1], s[2]))
+    names = [n for (_, n) in props]
+    try:
+        xi, yi, zi = names.index("x"), names.index("y"), names.index("z")
+    except ValueError:
+        xi, yi, zi = 0, 1, 2
+    if fmt == "ascii":
+        verts = []
+        for ln in data[body_start:].decode("ascii", "ignore").splitlines()[:count]:
+            p = ln.split()
+            if len(p) > max(xi, yi, zi):
+                try:
+                    verts.append((float(p[xi]), float(p[yi]), float(p[zi])))
+                except Exception:
+                    pass
+        return verts
+    # 바이너리
+    tmap = {"float": "f", "float32": "f", "double": "d", "float64": "d", "uchar": "B", "uint8": "B",
+            "char": "b", "int8": "b", "ushort": "H", "uint16": "H", "short": "h", "int16": "h",
+            "uint": "I", "uint32": "I", "int": "i", "int32": "i"}
+    sizes = {"f": 4, "d": 8, "B": 1, "b": 1, "H": 2, "h": 2, "I": 4, "i": 4}
+    codes = [tmap.get(t, "f") for (t, _) in props]
+    recfmt = fmt + "".join(codes)
+    recsize = sum(sizes[c] for c in codes)
+    verts = []
+    off = body_start
+    for i in range(count):
+        if off + recsize > len(data):
+            break
+        vals = struct.unpack_from(recfmt, data, off)
+        verts.append((float(vals[xi]), float(vals[yi]), float(vals[zi])))
+        off += recsize
+    return verts
+
+
+def _parse_mesh_vertices(data, name=""):
+    """OBJ / PLY(ASCII·바이너리) / STL(ASCII·바이너리) → 정점 좌표 리스트."""
+    try:
+        low = (name or "").lower()
+        if low.endswith(".stl") or data[:5].lstrip()[:5].lower() == b"solid":
+            v = _parse_stl(data)
+            if v:
+                return v
+        if low.endswith(".ply") or data[:3] == b"ply":
+            return _parse_ply(data)
+        return _parse_obj(data)
+    except Exception as e:
+        print("메시 파싱 실패:", e)
+        return []
+
+
+def _orient_face_points(a):
+    """임의 방향의 3D 얼굴 점을 표준 자세(X=좌우, Y=위, Z=앞)로 자동 정렬합니다(PCA + 대칭·폭 휴리스틱)."""
+    a = a - a.mean(0)
+    n = len(a)
+    s = a[np.linspace(0, n - 1, min(n, 3000)).astype(int)]
+    # PCA: 주성분(분산 큰 순). 가장 작은 분산 축 ≈ 얼굴 깊이(앞뒤) 법선
+    _, _, vt = np.linalg.svd(s - s.mean(0), full_matrices=False)
+    A0, A1, depth = vt[0], vt[1], vt[2]
+    # 앞(+Z): 코가 튀어나온 쪽. 깊이축 투영의 극단이 큰 쪽을 앞으로
+    dz = s @ depth
+    if abs(dz.min()) > abs(dz.max()):
+        depth = -depth
+    # 세로축: 좌우는 대칭(왜도≈0), 세로는 위-아래 비대칭(턱 좁음) → 왜도 큰 축이 세로
+    def skew(ax):
+        p = s @ ax; sd = p.std() or 1.0
+        return abs((((p - p.mean()) / sd) ** 3).mean())
+    vert, lr = (A0, A1) if skew(A0) >= skew(A1) else (A1, A0)
+    # +위: 좌우 폭이 넓은 쪽(이마·광대)이 위, 좁은 쪽(턱)이 아래
+    pv = s @ vert; plr = s @ lr
+    med = np.median(pv)
+    top = plr[pv > med]; bot = plr[pv <= med]
+    tw = (top.max() - top.min()) if len(top) else 0
+    bw = (bot.max() - bot.min()) if len(bot) else 0
+    if tw < bw:
+        vert = -vert
+    R = np.vstack([lr, vert, depth])   # 새 기준(행=축)
+    return a @ R.T                      # 새 좌표(x=좌우, y=위, z=앞)
 
 
 def _jaw2d_from_mesh(verts):
@@ -2896,6 +3009,7 @@ def _jaw2d_from_mesh(verts):
         if float(max(ext)) < 5:      # 미터 단위로 보이면 mm로 변환
             a *= 1000.0
         a -= a.mean(0)
+        a = _orient_face_points(a)   # 임의 방향 스캔 자동 정렬(X=좌우·Y=위·Z=앞)
         x, y, z = a[:, 0], a[:, 1], a[:, 2]
         zmid = np.median(z)
         front = a[z >= zmid]         # 얼굴 앞쪽 절반(코 방향)
@@ -2956,8 +3070,8 @@ def _cad_to_dxf(cad):
     text(left, bottom, 4.5, "HeOnn FaceFit custom head - plan (mm)", "NOTE")
     text(left, bottom - 7, 3.2,
          f"contact arc={cad['arc_len']} R={cad['radius']} minR={cad['min_radius']} "
-         f"chord={cad['chord']} depth={cad['sagitta']} width={cad['head_width']} "
-         f"thk={cad['thickness']} mount={cad['mount_w']} (ipd={cad['ipd_mm']})",
+         f"chord={cad['chord']} depth={cad['sagitta']} width={cad['head_width']} thk={cad['thickness']} "
+         f"mount={cad['mount_w']} holeGap={cad.get('hole_gap','-')} holeD={cad.get('hole_d','-')} (ipd={cad['ipd_mm']})",
          "NOTE")
     dxf_body = "".join(ent)
     return "0\nSECTION\n2\nENTITIES\n" + dxf_body + "0\nENDSEC\n0\nEOF\n"
@@ -3028,8 +3142,8 @@ def _render_head_page(cad, dxf_href):
     <tr><td class="k">곡률 반경 R (밀착 기준)</td><td class="v">{cad['radius']} mm</td></tr>
     <tr><td class="k">최대 굴곡(최소 반경)</td><td class="v">{cad['min_radius']} mm</td></tr>
     <tr><td class="k">현(chord) 길이 · 곡선 깊이</td><td class="v">{cad['chord']} · {cad['sagitta']} mm</td></tr>
-    <tr><td class="k">헤드 폭 (접촉~결합면)</td><td class="v">{cad['head_width']} mm</td></tr>
-    <tr><td class="k">헤드 두께 · 결합부 폭</td><td class="v">{cad['thickness']} · {cad['mount_w']} mm</td></tr>
+    <tr><td class="k">헤드 폭 · 두께</td><td class="v">{cad['head_width']} · {cad['thickness']} mm</td></tr>
+    <tr><td class="k">결합부 (돌기폭·구멍간격·구멍경)</td><td class="v">{cad['mount_w']} · {cad.get('hole_gap','-')} · {cad.get('hole_d','-')} mm</td></tr>
   </table>
   <a class="dl" href="{dxf_href}" download="heonn_head.dxf">📐 CAD 도면(DXF) 내려받기</a>
   <div class="use">
@@ -3043,11 +3157,14 @@ def _render_head_page(cad, dxf_href):
 
 # 헤드 도면(DXF) 다운로드. head_mm=헤드 크기, ipd_mm=스케일 실측 보정
 @app.get("/scan/{scan_id}/head.dxf")
-def scan_head_dxf(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0):
+def scan_head_dxf(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0,
+                  mount_w: float = 20.0, hole_gap: float = 28.0, hole_d: float = 5.0,
+                  head_width: float = 22.0, thickness: float = 8.0):
     raw = _load_scan_image(scan_id)
     if raw is None:
         return Response(status_code=404)
-    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm)
+    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm, mount_w=mount_w, hole_gap=hole_gap,
+                   hole_d=hole_d, head_width=head_width, thickness=thickness)
     if cad is None:
         return Response(content="얼굴/턱선을 찾지 못했습니다.", status_code=422)
     dxf = _cad_to_dxf(cad)
@@ -3060,14 +3177,19 @@ def scan_head_dxf(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0):
 # 헤드 도면 미리보기 페이지 (헤드 접촉 곡선 + 측정값 + 사용법 + DXF 다운로드)
 # ?head_mm=75 : 헤드(금색 접촉부) 크기 / ?ipd_mm=63 : 스케일 기준(눈 사이 실측으로 보정)
 @app.get("/scan/{scan_id}/head", response_class=HTMLResponse)
-def scan_head_page(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0):
+def scan_head_page(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0,
+                   mount_w: float = 20.0, hole_gap: float = 28.0, hole_d: float = 5.0,
+                   head_width: float = 22.0, thickness: float = 8.0):
     raw = _load_scan_image(scan_id)
     if raw is None:
         return HTMLResponse("<p style='color:#fff;background:#09090b;padding:40px'>사진을 찾을 수 없습니다.</p>", status_code=404)
-    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm)
+    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm, mount_w=mount_w, hole_gap=hole_gap,
+                   hole_d=hole_d, head_width=head_width, thickness=thickness)
     if cad is None:
         return HTMLResponse("<p style='color:#fff;background:#09090b;padding:40px'>이 사진에서 얼굴/턱선을 찾지 못했어요.</p>", status_code=422)
-    href = f"/scan/{scan_id}/head.dxf?head_mm={cad['arc_len']}&ipd_mm={cad['ipd_mm']}"
+    href = (f"/scan/{scan_id}/head.dxf?head_mm={cad['arc_len']}&ipd_mm={cad['ipd_mm']}"
+            f"&mount_w={cad['mount_w']}&hole_gap={cad['hole_gap']}&hole_d={cad['hole_d']}"
+            f"&head_width={cad['head_width']}&thickness={cad['thickness']}")
     return HTMLResponse(_render_head_page(cad, href))
 
 
@@ -3101,8 +3223,10 @@ def head_build_form():
 
 <form class="card" method="post" action="/head/build" enctype="multipart/form-data">
   <h2>① 3D 스캔 파일 <span class="tag">가장 정확 (실척 mm)</span></h2>
-  <p>아이폰 Pro LiDAR 등으로 스캔한 <b>.obj / .ply(ASCII)</b> 파일. Y=위, Z=앞(정면) 기준.</p>
-  <input type="file" name="mesh" accept=".obj,.ply"/>
+  <p>아이폰 Pro LiDAR 등으로 스캔한 <b>.obj / .ply / .stl</b>(ASCII·바이너리 모두). 방향이 달라도 <b>자동 정렬</b>됩니다.</p>
+  <input type="file" name="mesh" accept=".obj,.ply,.stl"/>
+  <label>헤드 접촉 곡선 길이(mm)</label><input type="number" name="head_mm" value="75" step="1"/>
+  <div class="mrow"></div>
   <button type="submit">3D 파일로 헤드 도면 만들기</button>
 </form>
 
@@ -3114,8 +3238,28 @@ def head_build_form():
     <div><label>우측</label><input type="file" name="right" accept="image/*"/></div></div>
   <div class="row"><div><label>헤드 크기(mm)</label><input type="number" name="head_mm" value="75" step="1"/></div>
     <div><label>눈 사이(mm)</label><input type="number" name="ipd_mm" value="63" step="0.5"/></div></div>
+  <div class="mrow"></div>
   <button type="submit">사진으로 헤드 도면 만들기</button>
 </form>
+
+<div class="card" style="opacity:.9">
+  <h2>본체 결합부 실측치 <span class="tag">선택 — 알면 정확히 합체</span></h2>
+  <p>위 두 폼의 값이 함께 전송됩니다. 디바이스 본체 결합부 치수를 알면 아래 기본값을 바꿔주세요.</p>
+  <div class="row"><div><label>결합 돌기 폭(mm)</label><input form="" type="number" value="20" disabled></div>
+    <div><label>나사 구멍 간격(mm)</label><input type="number" value="28" disabled></div>
+    <div><label>구멍 지름(mm)</label><input type="number" value="5" disabled></div></div>
+  <p style="margin-top:8px">※ 실측치 반영은 각 폼 제출 시 <code>mount_w·hole_gap·hole_d·head_width·thickness</code> 값으로 전송됩니다(기본 20·28·5·22·8mm). 정확한 본체 치수를 주시면 기본값을 바꿔 반영해 드려요.</p>
+</div>
+<script>
+  // 두 폼에 결합부 실측 입력(숨김 기본값)을 넣어 함께 전송
+  var mrows = document.querySelectorAll('.mrow');
+  var fields = [['mount_w','결합 돌기 폭',20],['hole_gap','나사 구멍 간격',28],['hole_d','구멍 지름',5],['head_width','헤드 폭',22],['thickness','헤드 두께',8]];
+  mrows.forEach(function(m){
+    fields.forEach(function(f){
+      var i=document.createElement('input'); i.type='hidden'; i.name=f[0]; i.value=f[2]; m.appendChild(i);
+    });
+  });
+</script>
 </body></html>""")
 
 
@@ -3123,18 +3267,21 @@ def head_build_form():
 @app.post("/head/build", response_class=HTMLResponse)
 async def head_build(mesh: UploadFile = File(None), front: UploadFile = File(None),
                      left: UploadFile = File(None), right: UploadFile = File(None),
-                     head_mm: float = Form(75.0), ipd_mm: float = Form(63.0)):
+                     head_mm: float = Form(75.0), ipd_mm: float = Form(63.0),
+                     mount_w: float = Form(20.0), hole_gap: float = Form(28.0), hole_d: float = Form(5.0),
+                     head_width: float = Form(22.0), thickness: float = Form(8.0)):
+    mk = dict(mount_w=mount_w, hole_gap=hole_gap, hole_d=hole_d, head_width=head_width, thickness=thickness)
     try:
         if mesh is not None and getattr(mesh, "filename", ""):
             data = await mesh.read()
             verts = _parse_mesh_vertices(data, mesh.filename)
             if not verts:
-                return _head_err("3D 파일을 읽지 못했어요. OBJ 또는 ASCII PLY만 지원합니다(바이너리 PLY 미지원).")
+                return _head_err("3D 파일을 읽지 못했어요. OBJ · PLY · STL(ASCII/바이너리)을 지원합니다.")
             jr = _jaw2d_from_mesh(verts)
             if jr is None:
-                return _head_err("3D 스캔에서 턱선을 찾지 못했어요. 얼굴이 정면(Y=위·Z=앞)으로 선 스캔을 올려주세요.")
+                return _head_err("3D 스캔에서 턱선을 찾지 못했어요. 얼굴이 포함된 스캔인지 확인해주세요(자동 정렬 적용됨).")
             jaw, chin = jr
-            cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=f"3D 스캔 파일({mesh.filename})")
+            cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=f"3D 스캔 파일({mesh.filename})", **mk)
         elif front is not None and getattr(front, "filename", ""):
             f = await front.read()
             lf = await left.read() if (left and getattr(left, "filename", "")) else None
@@ -3143,7 +3290,7 @@ async def head_build(mesh: UploadFile = File(None), front: UploadFile = File(Non
             if jr is None:
                 return _head_err("정면 사진에서 얼굴/턱선을 찾지 못했어요.")
             jaw, chin, used = jr
-            cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=f"사진 {len(used)}장 ({'·'.join(used)})")
+            cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=f"사진 {len(used)}장 ({'·'.join(used)})", **mk)
         else:
             return _head_err("3D 파일 또는 정면 사진을 올려주세요.")
         if cad is None:
