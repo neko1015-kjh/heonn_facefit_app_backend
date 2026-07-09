@@ -185,7 +185,27 @@ def _init_db():
     conn.close()
 
 
-_init_db()
+def _init_db_with_retry(tries=8, delay=5):
+    """서버가 켜질 때 DB 표를 준비합니다.
+    Neon(무료 플랜)은 한동안 접속이 없으면 절전에 들어가고, 다시 깨어나는 사이
+    첫 연결이 잠깐 실패할 수 있습니다("Control plane request failed" 등).
+    이때 서버 전체가 죽지 않도록, 잠깐 기다렸다가 여러 번 다시 시도합니다."""
+    last = None
+    for i in range(tries):
+        try:
+            _init_db()
+            if i:
+                print(f"[startup] DB 준비 완료 (재시도 {i}회 후)")
+            return
+        except Exception as e:  # noqa: BLE001
+            last = e
+            print(f"[startup] DB 연결 실패 {i + 1}/{tries}: {e} — {delay}초 후 재시도")
+            time.sleep(delay)
+    # 모두 실패하면 마지막 오류를 그대로 올립니다(진짜 장애일 수 있으므로).
+    raise last if last else RuntimeError("DB 초기화 실패")
+
+
+_init_db_with_retry()
 
 # 얼굴 랜드마크(특징점) 검출기를 준비합니다.
 # 모델 파일(face_landmarker.task)이 없으면 자동으로 내려받습니다.
