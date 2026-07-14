@@ -393,6 +393,7 @@
 
   <div class="road-group">
     <h3 class="rg-todo">📋 예정</h3>
+    <div class="road-item"><span class="ck">🔄</span><span class="t"><b>iOS(아이폰) 지원</b> <span class="sub">코드 준비 완료(크로스플랫폼)·app.json iOS 설정 반영 → <b>1단계 Expo Go 미리보기 가능(무료)</b>. 2단계 실제 빌드·배포는 Apple 개발자 계정(연 $99)+TestFlight/앱스토어 심사 필요(소셜로그인 시 'Apple로 로그인' 대비)</span></span></div>
     <div class="road-item"><span class="ck">📋</span><span class="t">실제 구글 로그인 (OAuth) <span class="sub">코드 완료 · Google Cloud 설정 대기 중</span></span></div>
     <div class="road-item"><span class="ck">📋</span><span class="t">실제 네이버 로그인 (OAuth)</span></div>
   </div>
@@ -458,7 +459,13 @@
   <div class="section-title">📜 전체 개발 히스토리 <span class="section-note">(날짜순 — 개발·수정·업데이트 전부 / 지금부터 모든 내용 여기 기록)</span></div>
 
   <div class="road-group">
-    <h3 class="rg-done">2026-07-08 (오늘)</h3>
+    <h3 class="rg-done">2026-07-09 (오늘)</h3>
+    <div class="road-item"><span class="ck">•</span><span class="t"><b>iOS(아이폰) 지원 준비</b> — 코드가 이미 크로스플랫폼(안드로이드 전용 네이티브 없음, 기기연결은 시연 단계)이라 iOS 그대로 동작. <code>app.json</code>에 iOS 번들ID(<code>com.heonn.facefit</code>)·카메라/사진 권한 문구 추가. <b>1단계=Expo Go로 즉시 미리보기(무료)</b> / 2단계=실제 빌드·배포는 Apple 개발자 계정(연 $99)+TestFlight/앱스토어 심사(소셜로그인 시 'Apple로 로그인' 요구 대비)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t"><b>서버 다운 긴급 복구</b> — Neon DB 절전 깨어남 중 일시 연결 실패로 서버 시작이 통째로 실패(로그인 등 전체 503)했던 것 → Space 재시작으로 복구 + 시작 시 DB 연결 <b>재시도(8회·5초)</b>로 재발 방지(자세한 내용은 아래 🔧 수정·보완 내역)</span></div>
+  </div>
+
+  <div class="road-group">
+    <h3 class="rg-done">2026-07-08</h3>
     <div class="road-item"><span class="ck">•</span><span class="t">앱 <b>v18</b> APK 빌드·배포 — 맞춤 헤드 <b>인앱 다중뷰 가이드 촬영</b>(정면·좌·우 각도 안내+자동촬영)·도면(측정값·DXF) 앱 저장 포함(<b>설치 가능한 최신</b>)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">앱 <b>v17</b> APK 빌드·배포 — 인앱카메라(자동촬영·딤·분석연결)·전후 슬라이더 부드럽게·분석 실패 다시시도·기기 셋팅 가이드·문구 변경 포함</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">동일인 인식률 3차 개선 배포(서버) — 기준 0.30 + 평균 임베딩 기준</span></div>
