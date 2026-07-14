@@ -202,6 +202,16 @@
   .dlg-hist .ht { color: var(--muted); }
 
   footer { text-align: center; color: var(--faint); font-size: 12px; margin-top: 36px; line-height: 1.7; }
+
+  /* 상단 앱 전환 탭 (정식 앱 / Lite) */
+  .toptabs { display: flex; gap: 8px; margin: 4px 0 26px; flex-wrap: wrap; }
+  .toptab { background: var(--surface); color: var(--muted); border: 1px solid var(--border2); padding: 11px 20px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all .15s; }
+  .toptab:hover { color: var(--text); border-color: var(--amber); }
+  .toptab.active { background: var(--amber); color: var(--bg); border-color: var(--amber); }
+  .lite-hero { background: linear-gradient(135deg, rgba(52,211,153,0.12), rgba(96,165,250,0.10)); border: 1px solid var(--border2); border-radius: 16px; padding: 22px; margin-bottom: 22px; }
+  .lite-hero .lh-badge { display: inline-block; background: rgba(251,191,36,0.15); color: var(--amber); font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 999px; margin-bottom: 12px; }
+  .lite-hero h2 { font-size: 22px; color: var(--text); margin-bottom: 8px; }
+  .lite-hero p { color: var(--muted); font-size: 14px; line-height: 1.7; }
 </style>
 </head>
 <body>
@@ -211,6 +221,15 @@
     <div class="sub">서비스 대시보드 · 상태 · 로드맵</div>
     <div class="updated">마지막 점검: <span id="checked">2026-06-25 (백엔드·DB·웹·갤러리·대시보드 전부 정상 · v11 진짜 카카오 로그인 배포)</span></div>
   </header>
+
+  <!-- 상단 앱 전환 탭: 정식 앱 / Lite(신규) -->
+  <div class="toptabs">
+    <button type="button" class="toptab active" data-pane="main" onclick="showPane('main')">🟢 정식 앱 (HeOnn FaceFit)</button>
+    <button type="button" class="toptab" data-pane="lite" onclick="showPane('lite')">✨ Lite (신규·개발 중)</button>
+  </div>
+
+  <!-- ===== 정식 앱 화면 ===== -->
+  <div id="pane-main" class="toppane">
 
   <div class="section-title">🖥️ 서버 상태 <span class="section-note">(마지막 점검 기준)</span></div>
   <div class="status-grid">
@@ -549,10 +568,10 @@
   <div class="section-title">🗓️ 배포 내역 <span class="section-note">(수정·배포된 버전 기록 — 최신순)</span></div>
   <div class="road-group">
     <h3 class="rg-done">📱 앱(APK) 버전</h3>
-    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v18</b> · 맞춤 헤드 인앱 다중뷰 가이드 촬영 <span class="sub">인앱 카메라 다중뷰(정면·좌·우) 고개각도 안내 + 3·2·1 자동촬영 → 맞춤 헤드 도면(측정값·DXF) 앱에서 저장 포함 — <b>설치 가능한 최신</b> · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/fcce1ac5-4fbd-495e-a5b8-f9e150328715" target="_blank" rel="noopener" style="color:var(--amber400)">설치 링크 ↗</a> (2026-07-08 빌드)</span></span></div>
-    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v17</b> · 인앱카메라 자동촬영·전후슬라이더·셋팅 가이드 <span class="sub">인앱 카메라(3·2·1 자동촬영·딤·분석연결)·전후 슬라이더 부드럽게·분석 실패 다시시도·기기 셋팅 가이드·문구 변경 포함 · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/dd1f0ad4-9667-45a5-b9eb-93894ce499d5" target="_blank" rel="noopener" style="color:var(--amber400)">설치 링크 ↗</a> (2026-07-08 빌드)</span></span></div>
-    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v16</b> · three.js 3D·얼굴 부위 미니맵·사진 얼굴크롭 <span class="sub">three.js 3D 엔진(청동 조각상)·조밀화·얼굴 부위 미니맵·사진 얼굴만 표시·3D 코깊이/매트 튜닝 포함 · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/fcb4eb14-5cb9-475f-b505-1a43cb528f42" target="_blank" rel="noopener" style="color:var(--amber400)">설치 링크 ↗</a> (2026-07-01 빌드)</span></span></div>
-    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v15</b> · 인앱 카메라·3D 보정·슬라이더·로그인 리뉴얼·네이버/구글 로그인 <span class="sub">그동안 작업 전부 포함한 APK · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/cf142b8f-482c-4f8e-9c2b-08be82290e1b" target="_blank" rel="noopener" style="color:var(--amber400)">설치 링크 ↗</a> (2026-07-01 빌드)</span></span></div>
+    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v18</b> · 맞춤 헤드 인앱 다중뷰 가이드 촬영 <span class="sub">인앱 카메라 다중뷰(정면·좌·우) 고개각도 안내 + 3·2·1 자동촬영 → 맞춤 헤드 도면(측정값·DXF) 앱에서 저장 포함 — <b>설치 가능한 최신</b> · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/fcce1ac5-4fbd-495e-a5b8-f9e150328715" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-07-08 빌드)</span></span></div>
+    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v17</b> · 인앱카메라 자동촬영·전후슬라이더·셋팅 가이드 <span class="sub">인앱 카메라(3·2·1 자동촬영·딤·분석연결)·전후 슬라이더 부드럽게·분석 실패 다시시도·기기 셋팅 가이드·문구 변경 포함 · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/dd1f0ad4-9667-45a5-b9eb-93894ce499d5" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-07-08 빌드)</span></span></div>
+    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v16</b> · three.js 3D·얼굴 부위 미니맵·사진 얼굴크롭 <span class="sub">three.js 3D 엔진(청동 조각상)·조밀화·얼굴 부위 미니맵·사진 얼굴만 표시·3D 코깊이/매트 튜닝 포함 · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/fcb4eb14-5cb9-475f-b505-1a43cb528f42" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-07-01 빌드)</span></span></div>
+    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v15</b> · 인앱 카메라·3D 보정·슬라이더·로그인 리뉴얼·네이버/구글 로그인 <span class="sub">그동안 작업 전부 포함한 APK · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/cf142b8f-482c-4f8e-9c2b-08be82290e1b" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-07-01 빌드)</span></span></div>
     <div class="road-item done"><span class="ck">🛠️</span><span class="t"><b>v14</b> · 인앱 카메라 + 3D 각도 보정 <span class="sub">코드 완료 단계 — 별도 빌드 없이 v15에 통합됨</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v13</b> · 점수 근거값 표시 <span class="sub">스캔·리포트 점수마다 근거(좌우 폭 차이 5.9% 등) 표시</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v12</b> · 측정 보정 표시 <span class="sub">스캔 결과 보정 배지(정면·각도·조명) + 리포트 '측정 신뢰도' 카드</span></span></div>
@@ -755,6 +774,75 @@
     <div class="card-body"><div class="card-title">웹 배포 (Hugging Face Static)</div><a class="card-url" href="https://huggingface.co/spaces/neko1015/heonn-web" target="_blank" rel="noopener">huggingface.co/spaces/neko1015/heonn-web</a></div>
     <button type="button" class="copy-btn" data-copy="https://huggingface.co/spaces/neko1015/heonn-web">복사</button>
   </div>
+
+  </div><!-- /pane-main -->
+
+  <!-- ===== Lite 화면 ===== -->
+  <div id="pane-lite" class="toppane" style="display:none">
+
+    <div class="lite-hero">
+      <span class="lh-badge">🚧 개발 중 · 별도 앱</span>
+      <h2>✨ HeOnn FaceFit Lite</h2>
+      <p><b>기기 없이 쓰는 독립형 AI 얼굴분석 앱</b>이에요. 정식 앱을 복제해 만든 <b>별도 앱</b>으로, 방짜유기 기기가 없어도 누구나 얼굴 분석·3D·리포트를 쓸 수 있게 만드는 가벼운 버전입니다. (<b>기기 블루투스 연결</b>과 <b>맞춤 헤드 도면(CAD)</b>은 제외)</p>
+    </div>
+
+    <div class="section-title">🎯 무엇을 만드나 <span class="section-note">(정식 앱과의 차이)</span></div>
+    <div class="status-grid">
+      <div class="status-card">
+        <div class="status-head"><div class="status-name">✅ 유지하는 기능</div><span class="badge b-ok">그대로</span></div>
+        <div class="status-desc">AI 얼굴 분석 · 3D 안면 뷰어 · 리포트/분석결과 · 소셜 로그인 · 케어/추천</div>
+      </div>
+      <div class="status-card">
+        <div class="status-head"><div class="status-name">❌ 빼는 기능</div><span class="badge b-warn">제외</span></div>
+        <div class="status-desc">기기 블루투스 연결(페어링·셋팅) · 맞춤 헤드 도면(CAD·다중뷰 촬영)</div>
+      </div>
+      <div class="status-card">
+        <div class="status-head"><div class="status-name">🔀 앱 흐름</div><span class="badge b-ok">단순화</span></div>
+        <div class="status-desc">로그인 → (동의) → <b>바로 얼굴 분석</b> (기기 연결·셋팅 단계 없음)</div>
+      </div>
+      <div class="status-card">
+        <div class="status-head"><div class="status-name">🔗 백엔드</div><span class="badge b-ok">공용</span></div>
+        <div class="status-desc">정식 앱과 <b>같은 서버·DB</b> 사용(이중 운영 없음). 분석기록에 앱 구분 태그 예정</div>
+      </div>
+    </div>
+
+    <div class="section-title">🪪 앱 정보</div>
+    <div class="card">
+      <div class="icon">📱</div>
+      <div class="card-body">
+        <div class="card-title">HeOnn FaceFit Lite <span class="tag tag-live">v1 준비 중</span></div>
+        <div class="card-desc">slug: <b>facefit-lite</b> · 패키지·번들: <b>com.heonn.facefitlite</b> · 딥링크: <b>facefitlite://</b></div>
+        <div class="card-desc">아직 빌드 전 — 웹 미리보기·Expo Go로 확인 예정</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon">🗂️</div>
+      <div class="card-body"><div class="card-title">Lite 모바일 코드 (GitHub · 비공개)</div><a class="card-url" href="https://github.com/neko1015-kjh/heonn_facefit_lite_mobile" target="_blank" rel="noopener">github.com/neko1015-kjh/heonn_facefit_lite_mobile</a></div>
+      <button type="button" class="copy-btn" data-copy="https://github.com/neko1015-kjh/heonn_facefit_lite_mobile">복사</button>
+    </div>
+
+    <div class="section-title">🗺️ 진행 단계 <span class="section-note">(9단계 · 0~5단계 먼저 완성 목표)</span></div>
+    <div class="road-group">
+      <div class="road-item done"><span class="ck">✅</span><span class="t"><b>0. 이름·아이디 정하기</b> <span class="sub">이름 "HeOnn FaceFit Lite" 확정 · slug/패키지/번들/scheme 결정</span></span></div>
+      <div class="road-item done"><span class="ck">✅</span><span class="t"><b>1. 프로젝트 복제</b> <span class="sub">정식 앱 복제 + 새 정체성 반영 + 새 GitHub 저장소 생성·푸시 + 의존성 설치·타입검사 통과</span></span></div>
+      <div class="road-item"><span class="ck">🔄</span><span class="t"><b>2. 기능 덜어내기</b> <span class="sub">기기 연결(페어링·셋팅) 제거 → CAD 제거 → 흐름 단순화. <b>진행 중</b></span></span></div>
+      <div class="road-item"><span class="ck">📋</span><span class="t"><b>3. 백엔드 연결 정리</b> <span class="sub">공용 백엔드 + 앱 구분 태그(app=lite)</span></span></div>
+      <div class="road-item"><span class="ck">📋</span><span class="t"><b>4. 디자인·브랜딩</b> <span class="sub">아이콘·스플래시·첫 화면 문구 Lite용 정리</span></span></div>
+      <div class="road-item"><span class="ck">📋</span><span class="t"><b>5. 웹 미리보기 검수</b> <span class="sub">브라우저·Expo Go로 전체 흐름 확인(1차 목표)</span></span></div>
+      <div class="road-item"><span class="ck">📋</span><span class="t"><b>6. 소셜 로그인 재등록</b> <span class="sub">새 앱 ID로 카카오·네이버·구글 콘솔 등록(출시 직전)</span></span></div>
+      <div class="road-item"><span class="ck">📋</span><span class="t"><b>7. 빌드</b> <span class="sub">안드로이드 APK 먼저(사용자 "빌드해" 시) · iOS 선택(Apple 계정 필요)</span></span></div>
+      <div class="road-item"><span class="ck">📋</span><span class="t"><b>8. 스토어 등록·출시</b> <span class="sub">별도 앱 등록 · 회원탈퇴/개인정보 삭제 필수</span></span></div>
+      <div class="road-item"><span class="ck">📋</span><span class="t"><b>9. 대시보드·운영 반영</b> <span class="sub">이 Lite 탭에 주소·버전·설치 링크·히스토리 계속 갱신</span></span></div>
+    </div>
+
+    <div class="section-title">📜 Lite 개발 히스토리</div>
+    <div class="road-group">
+      <h3 class="rg-done">2026-07-14</h3>
+      <div class="road-item"><span class="ck">•</span><span class="t"><b>Lite 프로젝트 착수</b> — 이름 확정(HeOnn FaceFit Lite) → 정식 앱 복제 → 새 정체성(slug·패키지·번들·scheme) 반영 → GitHub 저장소(neko1015-kjh/heonn_facefit_lite_mobile, 비공개) 생성·푸시 → 의존성 설치·타입검사 통과(1단계 완료). 이어서 기능 덜어내기(2단계) 시작</span></div>
+      <div class="road-item"><span class="ck">•</span><span class="t">대시보드에 <b>Lite 전용 탭</b> 추가(상단 "정식 앱 / Lite" 전환)</span></div>
+    </div>
+
+  </div><!-- /pane-lite -->
 
   <footer>
     HeOnn FaceFit — AI 얼굴 분석 · 온열 유기(방짜유기) 괄사 케어<br/>
@@ -1255,6 +1343,18 @@
       });
     });
   });
+</script>
+<script>
+  // 상단 앱 전환 탭: 정식 앱 / Lite 화면을 바꿔 보여줍니다.
+  function showPane(id) {
+    document.querySelectorAll('.toppane').forEach(function (p) {
+      p.style.display = (p.id === 'pane-' + id) ? '' : 'none';
+    });
+    document.querySelectorAll('.toptab').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-pane') === id);
+    });
+    window.scrollTo(0, 0);
+  }
 </script>
 </body>
 </html>
