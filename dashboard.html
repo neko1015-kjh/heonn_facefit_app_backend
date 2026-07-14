@@ -614,6 +614,7 @@
 
   <div class="section-title">🔧 수정·보완 내역 <span class="section-note">(버그 수정·개선 기록 — 최신순, 계속 추가)</span></div>
   <div class="road-group">
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-14</b> · 서버 다운 재발 방지 2차 (로그인 등 전체 503) <span class="sub">"Launch timed out, workload was not healthy 30min" — DB 시작 실패 시 예외를 던져 서버가 아예 안 뜨던 문제. → 시작 시 DB가 안 돼도 <b>서버는 무조건 기동</b>(비차단)하고 <b>백그라운드에서 계속 재시도</b>해 DB 깨어나면 표 준비. Space 재시작으로 즉시 복구 후 배포</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-09</b> · 서버 다운 복구 + 재발 방지(로그인 등 전체 503) <span class="sub">Neon(무료 플랜) DB가 절전에서 깨어나던 중 첫 연결이 일시 실패("Control plane request failed")해 <b>서버 시작이 통째로 실패(RUNTIME_ERROR)</b> → 카카오 로그인 포함 모든 기능이 안 되던 문제. Space 재시작으로 즉시 복구 + 시작 시 DB 연결을 <b>재시도(8회·5초)</b>로 감싸 일시 실패에 죽지 않게 개선(HF 배포)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 분석 실패 시 "다시 시도" 버튼 <span class="sub">방금 그 사진으로 바로 재분석 — 콜드스타트·일시적 연결 오류에 사용자가 쉽게 재시도(웹 미리보기 즉시 반영)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 전후 비교 슬라이더 부드럽게(2차) <span class="sub">드래그 위치를 React 상태→<b>Animated.Value</b>로 전환 — 드래그마다 화면 전체 재렌더되던 원인 제거(clip 폭·핸들 translateX). 모바일에서 매끄럽게 이동</span></span></div>
