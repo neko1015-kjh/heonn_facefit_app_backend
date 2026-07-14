@@ -185,27 +185,51 @@ def _init_db():
     conn.close()
 
 
-def _init_db_with_retry(tries=8, delay=5):
-    """서버가 켜질 때 DB 표를 준비합니다.
-    Neon(무료 플랜)은 한동안 접속이 없으면 절전에 들어가고, 다시 깨어나는 사이
-    첫 연결이 잠깐 실패할 수 있습니다("Control plane request failed" 등).
-    이때 서버 전체가 죽지 않도록, 잠깐 기다렸다가 여러 번 다시 시도합니다."""
-    last = None
+# DB 표 준비가 끝났는지 표시(백그라운드 재시도에서 사용)
+_db_ready = False
+
+
+def _try_init_db(tries=3, delay=4):
+    """DB 표 준비를 여러 번 시도합니다. 성공하면 True.
+    Neon(무료 플랜)은 절전에서 깨어나는 사이 첫 연결이 잠깐 실패할 수 있어요
+    ("Control plane request failed" 등)."""
+    global _db_ready
     for i in range(tries):
         try:
             _init_db()
+            _db_ready = True
             if i:
                 print(f"[startup] DB 준비 완료 (재시도 {i}회 후)")
+            return True
+        except Exception as e:  # noqa: BLE001
+            print(f"[startup] DB 연결 실패 {i + 1}/{tries}: {e}")
+            if i < tries - 1:
+                time.sleep(delay)
+    return False
+
+
+def _init_db_background():
+    """백그라운드에서 DB가 깨어날 때까지 계속 재시도합니다.
+    이렇게 하면 DB가 잠깐 안 되더라도 서버(웹/로그인 등)는 정상적으로 뜹니다."""
+    global _db_ready
+    delay = 10
+    while not _db_ready:
+        time.sleep(delay)
+        try:
+            _init_db()
+            _db_ready = True
+            print("[startup] DB 준비 완료 (백그라운드 재시도 성공)")
             return
         except Exception as e:  # noqa: BLE001
-            last = e
-            print(f"[startup] DB 연결 실패 {i + 1}/{tries}: {e} — {delay}초 후 재시도")
-            time.sleep(delay)
-    # 모두 실패하면 마지막 오류를 그대로 올립니다(진짜 장애일 수 있으므로).
-    raise last if last else RuntimeError("DB 초기화 실패")
+            print(f"[startup] DB 백그라운드 재시도 실패: {e} — {delay}초 후 다시")
+            delay = min(delay + 10, 60)
 
 
-_init_db_with_retry()
+# 시작 시 DB 표를 준비합니다. 잠깐 실패해도 서버는 죽지 않고 뜨며,
+# 백그라운드에서 DB가 깨어나면 표 준비를 마칩니다. (서버 전체 다운 방지)
+if not _try_init_db():
+    print("[startup] DB가 아직 준비 안 됨 — 서버는 계속 뜨고, 백그라운드에서 재시도합니다.")
+    threading.Thread(target=_init_db_background, daemon=True).start()
 
 # 얼굴 랜드마크(특징점) 검출기를 준비합니다.
 # 모델 파일(face_landmarker.task)이 없으면 자동으로 내려받습니다.
