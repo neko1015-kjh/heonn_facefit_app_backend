@@ -781,9 +781,29 @@
   <div id="pane-lite" class="toppane" style="display:none">
 
     <div class="lite-hero">
-      <span class="lh-badge">🚧 개발 중 · 별도 앱</span>
+      <span class="lh-badge">🌐 웹 미리보기 공개 · 개발 중</span>
       <h2>✨ HeOnn FaceFit Lite</h2>
       <p><b>기기 없이 쓰는 독립형 AI 얼굴분석 앱</b>이에요. 정식 앱을 복제해 만든 <b>별도 앱</b>으로, 방짜유기 기기가 없어도 누구나 얼굴 분석·3D·리포트를 쓸 수 있게 만드는 가벼운 버전입니다. (<b>기기 블루투스 연결</b>과 <b>맞춤 헤드 도면(CAD)</b>은 제외)</p>
+    </div>
+
+    <div class="section-title">🔗 접속 주소 <span class="section-note">(Lite 전용)</span></div>
+    <div class="hero">
+      <div class="label">🌐 지금 웹에서 바로 확인</div>
+      <div class="desc">설치 없이 이 주소로 Lite를 열어볼 수 있어요. (첫 접속 시 서버가 깨어나며 30초~1분 걸릴 수 있어요)</div>
+      <div class="hero-url">
+        <a href="https://neko1015-heonn-web-lite.static.hf.space" target="_blank" rel="noopener">neko1015-heonn-web-lite.static.hf.space</a>
+        <button type="button" class="copy-btn" data-copy="https://neko1015-heonn-web-lite.static.hf.space">복사</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="icon">🔗</div>
+      <div class="card-body"><div class="card-title">백엔드 (정식 앱과 공용)</div><a class="card-url" href="https://neko1015-facefit-backend.hf.space" target="_blank" rel="noopener">neko1015-facefit-backend.hf.space</a></div>
+      <a class="copy-btn" href="https://neko1015-facefit-backend.hf.space" target="_blank" rel="noopener">열기 ↗</a>
+    </div>
+    <div class="card">
+      <div class="icon">☁️</div>
+      <div class="card-body"><div class="card-title">Lite 웹 배포 (Hugging Face Static)</div><a class="card-url" href="https://huggingface.co/spaces/neko1015/heonn-web-lite" target="_blank" rel="noopener">huggingface.co/spaces/neko1015/heonn-web-lite</a></div>
+      <button type="button" class="copy-btn" data-copy="https://huggingface.co/spaces/neko1015/heonn-web-lite">복사</button>
     </div>
 
     <div class="section-title">🎯 무엇을 만드나 <span class="section-note">(정식 앱과의 차이)</span></div>
@@ -810,9 +830,9 @@
     <div class="card">
       <div class="icon">📱</div>
       <div class="card-body">
-        <div class="card-title">HeOnn FaceFit Lite <span class="tag tag-live">v1 준비 중</span></div>
+        <div class="card-title">HeOnn FaceFit Lite <span class="tag tag-live">웹 미리보기 공개</span></div>
         <div class="card-desc">slug: <b>facefit-lite</b> · 패키지·번들: <b>com.heonn.facefitlite</b> · 딥링크: <b>facefitlite://</b></div>
-        <div class="card-desc">아직 빌드 전 — 웹 미리보기·Expo Go로 확인 예정</div>
+        <div class="card-desc">웹에서 바로 확인 가능 · APK 빌드는 아직(사용자 "빌드해" 시 진행)</div>
       </div>
     </div>
     <div class="card">
@@ -825,21 +845,35 @@
     <div class="road-group">
       <div class="road-item done"><span class="ck">✅</span><span class="t"><b>0. 이름·아이디 정하기</b> <span class="sub">이름 "HeOnn FaceFit Lite" 확정 · slug/패키지/번들/scheme 결정</span></span></div>
       <div class="road-item done"><span class="ck">✅</span><span class="t"><b>1. 프로젝트 복제</b> <span class="sub">정식 앱 복제 + 새 정체성 반영 + 새 GitHub 저장소 생성·푸시 + 의존성 설치·타입검사 통과</span></span></div>
-      <div class="road-item"><span class="ck">🔄</span><span class="t"><b>2. 기능 덜어내기</b> <span class="sub">기기 연결(페어링·셋팅) 제거 → CAD 제거 → 흐름 단순화. <b>진행 중</b></span></span></div>
+      <div class="road-item done"><span class="ck">✅</span><span class="t"><b>2. 기능 덜어내기</b> <span class="sub">기기 연결(페어링·셋팅)·맞춤 헤드 CAD 제거 + 흐름 단순화(로그인→바로 분석). 파일 삭제·타입검사 통과</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>3. 백엔드 연결 정리</b> <span class="sub">공용 백엔드 + 앱 구분 태그(app=lite)</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>4. 디자인·브랜딩</b> <span class="sub">아이콘·스플래시·첫 화면 문구 Lite용 정리</span></span></div>
-      <div class="road-item"><span class="ck">📋</span><span class="t"><b>5. 웹 미리보기 검수</b> <span class="sub">브라우저·Expo Go로 전체 흐름 확인(1차 목표)</span></span></div>
+      <div class="road-item"><span class="ck">🔄</span><span class="t"><b>5. 웹 미리보기 검수</b> <span class="sub"><b>웹 배포 완료</b>(위 접속 주소) — 브라우저로 전체 흐름 확인 진행 중</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>6. 소셜 로그인 재등록</b> <span class="sub">새 앱 ID로 카카오·네이버·구글 콘솔 등록(출시 직전)</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>7. 빌드</b> <span class="sub">안드로이드 APK 먼저(사용자 "빌드해" 시) · iOS 선택(Apple 계정 필요)</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>8. 스토어 등록·출시</b> <span class="sub">별도 앱 등록 · 회원탈퇴/개인정보 삭제 필수</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>9. 대시보드·운영 반영</b> <span class="sub">이 Lite 탭에 주소·버전·설치 링크·히스토리 계속 갱신</span></span></div>
     </div>
 
-    <div class="section-title">📜 Lite 개발 히스토리</div>
+    <div class="section-title">🗓️ Lite 배포 내역 <span class="section-note">(Lite 전용 · 최신순)</span></div>
     <div class="road-group">
-      <h3 class="rg-done">2026-07-14</h3>
-      <div class="road-item"><span class="ck">•</span><span class="t"><b>Lite 프로젝트 착수</b> — 이름 확정(HeOnn FaceFit Lite) → 정식 앱 복제 → 새 정체성(slug·패키지·번들·scheme) 반영 → GitHub 저장소(neko1015-kjh/heonn_facefit_lite_mobile, 비공개) 생성·푸시 → 의존성 설치·타입검사 통과(1단계 완료). 이어서 기능 덜어내기(2단계) 시작</span></div>
-      <div class="road-item"><span class="ck">•</span><span class="t">대시보드에 <b>Lite 전용 탭</b> 추가(상단 "정식 앱 / Lite" 전환)</span></div>
+      <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>웹 미리보기 v1</b> · HeOnn FaceFit Lite <span class="sub">HF Static 배포 — 기기 연결·CAD 제거된 Lite 흐름(로그인→바로 분석) · <a href="https://neko1015-heonn-web-lite.static.hf.space" target="_blank" rel="noopener" style="color:var(--amber)">웹 열기 ↗</a> (2026-07-14)</span></span></div>
+      <div class="road-item"><span class="ck">📋</span><span class="t"><b>APK v1</b> · 안드로이드 <span class="sub">예정 — 사용자가 "빌드해" 하면 EAS 빌드(새 EAS 프로젝트 생성)</span></span></div>
+    </div>
+
+    <div class="section-title">🔧 Lite 수정·보완 내역 <span class="section-note">(Lite 전용 · 최신순)</span></div>
+    <div class="road-group">
+      <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-14</b> · 웹 배포 시 폰트 LFS 처리 <span class="sub">HF가 .ttf/.otf 등 바이너리를 LFS로 요구 → dist에 .gitattributes(LFS) 추가하고 기존 커밋 바이너리를 LFS로 이관 후 재배포 성공</span></span></div>
+    </div>
+
+    <div class="section-title">📜 Lite 전체 개발 히스토리 <span class="section-note">(Lite만 · 날짜순)</span></div>
+    <div class="road-group">
+      <h3 class="rg-done">2026-07-14 (오늘)</h3>
+      <div class="road-item"><span class="ck">•</span><span class="t"><b>0단계</b> 이름 확정(HeOnn FaceFit Lite) · slug/패키지/번들/scheme 결정</span></div>
+      <div class="road-item"><span class="ck">•</span><span class="t"><b>1단계</b> 정식 앱 복제 → 새 정체성 반영 → GitHub 저장소(neko1015-kjh/heonn_facefit_lite_mobile, 비공개) 생성·푸시 → 의존성 설치·타입검사 통과</span></div>
+      <div class="road-item"><span class="ck">•</span><span class="t"><b>2단계</b> 기기 연결(페어링·셋팅)·맞춤 헤드 CAD 제거 + 흐름 단순화(로그인→바로 분석). PairingScreen·CalibrationScreen·MultiViewCapture 삭제 · 타입검사 통과</span></div>
+      <div class="road-item"><span class="ck">•</span><span class="t"><b>5단계(웹)</b> Lite 웹을 HF Static(heonn-web-lite)에 배포 — 설치 없이 접속 가능</span></div>
+      <div class="road-item"><span class="ck">•</span><span class="t">대시보드 <b>Lite 전용 탭</b> 추가 + <b>접속 주소·분리 히스토리(배포·수정·전체)</b> 구성</span></div>
     </div>
 
   </div><!-- /pane-lite -->
