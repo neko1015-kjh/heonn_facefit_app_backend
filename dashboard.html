@@ -823,7 +823,7 @@
       </div>
       <div class="status-card">
         <div class="status-head"><div class="status-name">🔗 백엔드</div><span class="badge b-ok">공용</span></div>
-        <div class="status-desc">정식 앱과 <b>같은 서버·DB</b> 사용(이중 운영 없음). 분석기록에 앱 구분 태그 예정</div>
+        <div class="status-desc">정식 앱과 <b>같은 서버·DB</b> 사용(이중 운영 없음). 분석기록에 <b>앱 구분 태그(app_source=lite)</b> 적용됨</div>
       </div>
     </div>
 
@@ -847,7 +847,7 @@
       <div class="road-item done"><span class="ck">✅</span><span class="t"><b>0. 이름·아이디 정하기</b> <span class="sub">이름 "HeOnn FaceFit Lite" 확정 · slug/패키지/번들/scheme 결정</span></span></div>
       <div class="road-item done"><span class="ck">✅</span><span class="t"><b>1. 프로젝트 복제</b> <span class="sub">정식 앱 복제 + 새 정체성 반영 + 새 GitHub 저장소 생성·푸시 + 의존성 설치·타입검사 통과</span></span></div>
       <div class="road-item done"><span class="ck">✅</span><span class="t"><b>2. 기능 덜어내기</b> <span class="sub">기기 연결(페어링·셋팅)·맞춤 헤드 CAD 제거 + 흐름 단순화(로그인→바로 분석). 파일 삭제·타입검사 통과</span></span></div>
-      <div class="road-item"><span class="ck">📋</span><span class="t"><b>3. 백엔드 연결 정리</b> <span class="sub">공용 백엔드 + 앱 구분 태그(app=lite)</span></span></div>
+      <div class="road-item done"><span class="ck">✅</span><span class="t"><b>3. 백엔드 연결 정리</b> <span class="sub">공용 백엔드 유지 + <b>앱 구분 태그 적용</b> — Lite는 X-App-Source:lite 헤더 전송, 백엔드가 scans.app_source에 기록(정식='full')</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>4. 디자인·브랜딩</b> <span class="sub">아이콘·스플래시·첫 화면 문구 Lite용 정리</span></span></div>
       <div class="road-item"><span class="ck">🔄</span><span class="t"><b>5. 웹 미리보기 검수</b> <span class="sub"><b>웹 배포 완료</b>(위 접속 주소) — 브라우저로 전체 흐름 확인 진행 중</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>6. 소셜 로그인 재등록</b> <span class="sub">새 앱 ID로 카카오·네이버·구글 콘솔 등록(출시 직전)</span></span></div>
@@ -875,6 +875,7 @@
       <div class="road-item"><span class="ck">•</span><span class="t"><b>2단계</b> 기기 연결(페어링·셋팅)·맞춤 헤드 CAD 제거 + 흐름 단순화(로그인→바로 분석). PairingScreen·CalibrationScreen·MultiViewCapture 삭제 · 타입검사 통과</span></div>
       <div class="road-item"><span class="ck">•</span><span class="t"><b>5단계(웹)</b> Lite 웹을 HF Static(heonn-web-lite)에 배포 — 설치 없이 접속 가능</span></div>
       <div class="road-item"><span class="ck">•</span><span class="t">대시보드 <b>Lite 전용 탭</b> 추가 + <b>접속 주소·분리 히스토리(배포·수정·전체)</b> 구성</span></div>
+      <div class="road-item"><span class="ck">•</span><span class="t"><b>3단계</b> 공용 백엔드에 <b>앱 구분 태그(app_source)</b> 추가 — Lite 앱은 X-App-Source:lite 헤더 전송, 백엔드 scans.app_source에 기록(정식='full', 비파괴). Lite 웹 재배포로 반영</span></div>
     </div>
 
   </div><!-- /pane-lite -->
