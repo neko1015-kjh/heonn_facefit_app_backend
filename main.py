@@ -112,6 +112,9 @@ def _init_db():
             conn.execute("ALTER TABLE scans ADD COLUMN user_id INTEGER DEFAULT 0")
         if "image_data" not in existing:
             conn.execute(f"ALTER TABLE scans ADD COLUMN image_data {db.BLOB}")
+        if "app_source" not in existing:
+            # 어느 앱에서 분석했는지 구분(full=정식 앱, lite=Lite 앱)
+            conn.execute("ALTER TABLE scans ADD COLUMN app_source TEXT DEFAULT 'full'")
 
     # 사용자 계정 표 (간단 세션 토큰 방식)
     conn.execute(
@@ -168,6 +171,7 @@ def _init_db():
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS care_side TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS signature TEXT DEFAULT ''")
         conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 0")
+        conn.execute("ALTER TABLE scans ADD COLUMN IF NOT EXISTS app_source TEXT DEFAULT 'full'")
         conn.execute("ALTER TABLE detections ADD COLUMN IF NOT EXISTS duration_ms INTEGER DEFAULT 0")
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id TEXT DEFAULT ''")
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at TEXT DEFAULT ''")
@@ -1436,10 +1440,12 @@ async def analyze_face(file: UploadFile = File(...)):
 
 # 사진을 분석하고 그 결과(사진 + 점수)를 이력으로 저장합니다. ("/history/scan")
 @app.post("/history/scan")
-async def save_scan(file: UploadFile = File(...), authorization: str = Header(None)):
+async def save_scan(file: UploadFile = File(...), authorization: str = Header(None), x_app_source: str = Header(None)):
     user_id = _current_user_id(authorization)
     if not user_id:
         return {"detected": False, "message": "로그인이 필요합니다."}
+    # 어느 앱에서 왔는지 구분: Lite 앱은 'X-App-Source: lite' 헤더를 보냄(없으면 정식='full')
+    app_source = "lite" if (x_app_source or "").strip().lower() == "lite" else "full"
     raw = await file.read()
     # [동시 접속] 무거운 분석은 별도 스레드에서 실행(이벤트 루프를 막지 않음)
     res = await asyncio.to_thread(_detect_and_score, raw)
@@ -1511,10 +1517,10 @@ async def save_scan(file: UploadFile = File(...), authorization: str = Header(No
     with db.connect() as conn:
         cur = conn.execute(
             """
-            INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, embedding, gender, age, dark_circle, wrinkle, basis, image_filename, user_id, image_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+            INSERT INTO scans (created_at, symmetry, balance, skin_brightness, skin_redness, care_side, signature, embedding, gender, age, dark_circle, wrinkle, basis, image_filename, user_id, image_data, app_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
             """,
-            (created_at, symmetry, balance, brightness, redness, care_side, signature_json, embedding_json, cur_gender, age, dark_circle, wrinkle, basis_json, filename, user_id, raw),
+            (created_at, symmetry, balance, brightness, redness, care_side, signature_json, embedding_json, cur_gender, age, dark_circle, wrinkle, basis_json, filename, user_id, raw, app_source),
         )
         new_id = cur.fetchone()[0]
         conn.commit()
