@@ -478,7 +478,12 @@
   <div class="section-title">📜 전체 개발 히스토리 <span class="section-note">(날짜순 — 개발·수정·업데이트 전부 / 지금부터 모든 내용 여기 기록)</span></div>
 
   <div class="road-group">
-    <h3 class="rg-done">2026-07-09 (오늘)</h3>
+    <h3 class="rg-done">2026-08-10 (오늘)</h3>
+    <div class="road-item"><span class="ck">•</span><span class="t"><b>BLE 통신 계층(앱 쪽) 구현</b> — 페어링이 <b>실제 블루투스 검색·연결</b>로 동작(기기 이름 HeOnn/FaceFit 인식), 케어 탭 온도·진동 설정을 <b>기기로 실제 전송</b>, 홈 상태바에 <b>실측 배터리·온도</b> 표시. 기기가 없거나 못 찾으면 <b>데모 모드로 자동 폴백</b>(기존 흐름 그대로). 통신 규격은 <code>bleSpec.ts</code> 한 파일에 모아 하드웨어 스펙 확정 시 그 파일만 교체. ※ Expo Go에선 BLE 불가 — 다음 빌드(v19)부터 실기기 테스트</span></div>
+  </div>
+
+  <div class="road-group">
+    <h3 class="rg-done">2026-07-09</h3>
     <div class="road-item"><span class="ck">•</span><span class="t"><b>iOS(아이폰) 지원 준비</b> — 코드가 이미 크로스플랫폼(안드로이드 전용 네이티브 없음, 기기연결은 시연 단계)이라 iOS 그대로 동작. <code>app.json</code>에 iOS 번들ID(<code>com.heonn.facefit</code>)·카메라/사진 권한 문구 추가. <b>1단계=Expo Go로 즉시 미리보기(무료)</b> / 2단계=실제 빌드·배포는 Apple 개발자 계정(연 $99)+TestFlight/앱스토어 심사(소셜로그인 시 'Apple로 로그인' 요구 대비)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t"><b>서버 다운 긴급 복구</b> — Neon DB 절전 깨어남 중 일시 연결 실패로 서버 시작이 통째로 실패(로그인 등 전체 503)했던 것 → Space 재시작으로 복구 + 시작 시 DB 연결 <b>재시도(8회·5초)</b>로 재발 방지(자세한 내용은 아래 🔧 수정·보완 내역)</span></div>
   </div>
@@ -680,8 +685,10 @@
     <div class="road-item"><span class="ck">🟡</span><span class="t">딥러닝 조밀 복원(3DDFA/DECA) <span class="sub">주름·표정까지 정밀 복원 — 단 BFM/FLAME <b>상용 라이선스 확보 후</b> 적용</span></span></div>
   </div>
   <div class="road-group">
-    <h3 class="rg-todo">🧭 기기 셋팅(위치 포인트)</h3>
-    <div class="road-item"><span class="ck">🟡</span><span class="t">실제 BLE 센서 연동 <span class="sub">현재는 4단계 안내 흐름 — 기기 통신 프로토콜 확정 후 실제 포인트 데이터 수집으로 연결</span></span></div>
+    <h3 class="rg-todo">🧭 기기 연동(BLE)</h3>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">BLE 통신 계층(앱 쪽) 구현 <span class="sub">2026-08-10 — 검색·연결·온도/진동 명령 전송·배터리/상태 수신 + 기기 없으면 데모 모드 자동 폴백. 규격(UUID·명령)은 bleSpec.ts 한 곳에 모아 하드웨어 스펙 나오면 그 파일만 교체</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">실기기 프로토콜 확정·연동 테스트 <span class="sub">하드웨어 펌웨어의 BLE 스펙 문서(서비스/특성 UUID·명령 규격) 확보 → bleSpec.ts 교체 → v19 빌드로 실기기 테스트 (Expo Go에선 BLE 불가)</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">셋팅 가이드 실측 연동 <span class="sub">현재는 4단계 안내 흐름 — 프로토콜 확정 후 실제 포인트 데이터 수집으로 연결</span></span></div>
   </div>
 
   <div class="section-title">👤 운영 계정 <span class="section-note">(카드의 "열기"로 관리 페이지 바로 이동)</span></div>
