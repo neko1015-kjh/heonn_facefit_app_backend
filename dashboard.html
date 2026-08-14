@@ -479,6 +479,7 @@
 
   <div class="road-group">
     <h3 class="rg-done">2026-08-10 (오늘)</h3>
+    <div class="road-item"><span class="ck">•</span><span class="t">헤드 CAD 개선 3건 — <b>STL 정점 중복 제거</b>(9,126→1,600 검증) · <b>자동 정렬 수동 뒤집기</b>(/head/build 체크박스) · <b>결합부 실측치 고정 구조</b>(_MOUNT_SPEC 한 곳, 확정 시 전체 고정). 합성 STL 실동작 검증 + pytest 8건 통과, HF 배포</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">앱 <b>v19</b> APK 빌드·배포 — BLE 통신 계층 포함(<b>설치 가능한 최신</b>)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t"><b>BLE 통신 계층(앱 쪽) 구현</b> — 페어링이 <b>실제 블루투스 검색·연결</b>로 동작(기기 이름 HeOnn/FaceFit 인식), 케어 탭 온도·진동 설정을 <b>기기로 실제 전송</b>, 홈 상태바에 <b>실측 배터리·온도</b> 표시. 기기가 없거나 못 찾으면 <b>데모 모드로 자동 폴백</b>(기존 흐름 그대로). 통신 규격은 <code>bleSpec.ts</code> 한 파일에 모아 하드웨어 스펙 확정 시 그 파일만 교체. ※ Expo Go에선 BLE 불가 — 다음 빌드(v19)부터 실기기 테스트</span></div>
   </div>
@@ -685,6 +686,13 @@
     <h3 class="rg-todo">🧊 3D 안면 스캔</h3>
     <div class="road-item"><span class="ck">🟡</span><span class="t">실사 피부 텍스처 매핑 <span class="sub">촬영한 얼굴 사진을 3D 메시에 입혀 실제 얼굴처럼 표현(현재는 청동 재질)</span></span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">딥러닝 조밀 복원(3DDFA/DECA) <span class="sub">주름·표정까지 정밀 복원 — 단 BFM/FLAME <b>상용 라이선스 확보 후</b> 적용</span></span></div>
+  </div>
+  <div class="road-group">
+    <h3 class="rg-todo">📐 맞춤 헤드 CAD</h3>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">STL 정점 중복 제거 <span class="sub">2026-08-10 — 삼각형마다 반복 저장되는 정점(평균 6배)을 제거해 메모리↓·턱선 추출 안정성↑ (검증: 9,126→1,600 고유점)</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">3D 자동 정렬 수동 뒤집기 옵션 <span class="sub">2026-08-10 — /head/build 3D 폼에 위아래·좌우·앞뒤 뒤집기 체크박스. 자동 정렬(PCA)이 드물게 방향을 반대로 잡을 때 바로잡기</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">본체 결합부 실측치 고정 구조 <span class="sub">2026-08-10 — 치수를 서버 한 곳(_MOUNT_SPEC)에 집중. 실측 확정 시 True 한 번이면 모든 도면(웹·앱·갤러리)에 고정 적용</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">본체 실측치 입력 <span class="sub">디바이스 본체 결합부 실제 치수(돌기폭·구멍간격·구멍경·헤드폭·두께)가 확정되면 _MOUNT_SPEC에 넣고 고정(measured=True)</span></span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-todo">🧭 기기 연동(BLE)</h3>
@@ -1089,7 +1097,8 @@
       { d: '07-08', t: 'v3 — 얼굴에 대고 마사지하는 접촉 곡선 기준으로 재정의 + 헤드 평면 외곽(초승달형)·본체 결합부(돌기+나사구멍 2개)까지 정확화(디바이스 본체와 합체) + 미리보기/DXF 수정' },
       { d: '07-08', t: 'A+B 입력 — 3D 스캔 파일(.obj/ASCII PLY, 실척) 업로드 + 사진(정면+좌/우 다중, 뷰 평균) 지원. /head/build 업로드 도구' },
       { d: '07-08', t: '고도화 — 바이너리 PLY/STL 파서 추가 + PCA 3D 자동 정렬(임의 방향 스캔 OK) + 본체 결합부 실측 파라미터(돌기폭·구멍간격·구멍경·헤드폭·두께)' },
-      { d: '07-08', t: '촬영 가이드 A+B — (A,앱) 인앱 카메라 다중뷰(정면·좌·우) yaw 각도 안내 + 3·2·1 자동촬영 → /head/build.json으로 측정값·DXF 받아 앱에서 저장(앱 다음 빌드 반영) / (B,웹) /head/build 촬영 포즈 그림·팁 카드. 서버 /scan/guide에 yaw 추가' }
+      { d: '07-08', t: '촬영 가이드 A+B — (A,앱) 인앱 카메라 다중뷰(정면·좌·우) yaw 각도 안내 + 3·2·1 자동촬영 → /head/build.json으로 측정값·DXF 받아 앱에서 저장(앱 다음 빌드 반영) / (B,웹) /head/build 촬영 포즈 그림·팁 카드. 서버 /scan/guide에 yaw 추가' },
+      { d: '08-10', t: '개선 3건 — STL 정점 중복 제거(턱선 추출 안정성↑) · 3D 자동 정렬 수동 뒤집기 체크박스(위아래/좌우/앞뒤) · 본체 결합부 실측치 고정 구조(_MOUNT_SPEC 한 곳, 실측 확정 시 모든 도면 고정)' }
     ],
     dbsafe: [
       { d: '06-26', t: 'DB 연결 with 전환 + 전역 예외 핸들러' },
