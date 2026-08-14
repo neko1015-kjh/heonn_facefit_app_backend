@@ -245,7 +245,7 @@
     </div>
     <div class="status-card">
       <div class="status-head"><div class="status-name">🌐 웹사이트</div><span class="badge b-ok">정상</span></div>
-      <div class="status-desc">Hugging Face Static · 앱과 동기화(v9 수준) · 회사 PC·폰 어디서나 접속 OK</div>
+      <div class="status-desc">Hugging Face Static · 앱 최신 코드와 동기화(2026-08-10 재배포 — 추천 이미지 차단 대체 포함) · 회사 PC·폰 어디서나 접속 OK</div>
       <a class="status-link" href="https://neko1015-heonn-web.static.hf.space" target="_blank" rel="noopener">열어서 확인 ↗</a>
     </div>
     <div class="status-card">
@@ -445,7 +445,7 @@
     <div class="road-item done"><span class="ck">✅</span><span class="t">DB 연결 안전 처리 (최우선) <span class="sub">모든 반복 호출 엔드포인트를 with(자동 닫기)로 전환 — 오류 나도 연결 누수 없음(Neon 한도 초과 예방) — 배포</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">전역 예외 핸들러 추가 <span class="sub">예상 못한 오류 시 스택트레이스 대신 친절한 안내 JSON — 배포</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">분석(mediapipe/OpenCV) 예외 처리 <span class="sub">검출 단계 보호 + 항목별 부분 실패 허용(주름 등 하나 실패해도 나머지 정상) — 이상 이미지에도 안내만 반환, 서버 안 죽음 — 배포</span></span></div>
-    <div class="road-item"><span class="ck">🟡</span><span class="t">추천 제품 이미지 외부 URL(unsplash) 대체 처리 <span class="sub">회사망 차단 시 대체 이미지 표시</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">추천 제품 이미지 외부 URL(unsplash) 대체 처리 <span class="sub">2026-08-10 — 이미지 로딩 실패(회사망 차단 등) 시 아이콘으로 자동 대체. 웹 재배포 완료, 앱은 다음 빌드(v20) 반영</span></span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">프론트 (앱) — 대체로 양호</h3>
@@ -479,6 +479,7 @@
 
   <div class="road-group">
     <h3 class="rg-done">2026-08-10 (오늘)</h3>
+    <div class="road-item"><span class="ck">•</span><span class="t">추천 제품 이미지 <b>회사망 차단 대비 대체 처리</b> — 설정 탭 제품 카드의 외부 이미지(unsplash) 로딩 실패 시 아이콘 자동 대체. <b>웹 재배포 완료</b>(회사망 사용자 즉시 적용), 앱은 다음 빌드(v20) 반영</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">헤드 CAD 개선 3건 — <b>STL 정점 중복 제거</b>(9,126→1,600 검증) · <b>자동 정렬 수동 뒤집기</b>(/head/build 체크박스) · <b>결합부 실측치 고정 구조</b>(_MOUNT_SPEC 한 곳, 확정 시 전체 고정). 합성 STL 실동작 검증 + pytest 8건 통과, HF 배포</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">앱 <b>v19</b> APK 빌드·배포 — BLE 통신 계층 포함(<b>설치 가능한 최신</b>)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t"><b>BLE 통신 계층(앱 쪽) 구현</b> — 페어링이 <b>실제 블루투스 검색·연결</b>로 동작(기기 이름 HeOnn/FaceFit 인식), 케어 탭 온도·진동 설정을 <b>기기로 실제 전송</b>, 홈 상태바에 <b>실측 배터리·온도</b> 표시. 기기가 없거나 못 찾으면 <b>데모 모드로 자동 폴백</b>(기존 흐름 그대로). 통신 규격은 <code>bleSpec.ts</code> 한 파일에 모아 하드웨어 스펙 확정 시 그 파일만 교체. ※ Expo Go에선 BLE 불가 — 다음 빌드(v19)부터 실기기 테스트</span></div>
