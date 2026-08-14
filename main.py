@@ -2725,6 +2725,32 @@ _HEAD_WIDTH_MM = 22.0     # 헤드 평면 폭(접촉 가장자리~본체 결합�
 _HEAD_THICK_MM = 8.0      # 헤드 두께(면 밖 방향, 참고)
 _MOUNT_W_MM = 20.0        # 본체 결합 돌기(tongue) 폭
 
+# ── 본체 결합부 실측치 (한 곳에서 관리) ──
+# 디바이스 본체의 실제 치수가 확정되면 아래 값을 실측값으로 바꾸고 "measured": True 로 바꾸세요.
+# measured=True가 되면 폼/주소로 어떤 값이 들어와도 이 실측값으로 "고정"되어
+# 누가 만들어도 항상 본체와 정확히 합체되는 도면이 나옵니다. (False면 지금처럼 입력값 사용)
+_MOUNT_SPEC = {
+    "measured": False,      # ← 실측 확정 시 True로
+    "mount_w": 20.0,        # 결합 돌기(tongue) 폭 mm
+    "hole_gap": 28.0,       # 나사 구멍 간격 mm
+    "hole_d": 5.0,          # 구멍 지름 mm
+    "head_width": 22.0,     # 헤드 평면 폭 mm
+    "thickness": 8.0,       # 헤드 두께 mm
+}
+
+
+def _mount_kwargs(mount_w=None, hole_gap=None, hole_d=None, head_width=None, thickness=None):
+    """결합부 치수 묶음을 만듭니다. 실측 확정(_MOUNT_SPEC.measured=True) 시 입력값 대신 실측값으로 고정."""
+    if _MOUNT_SPEC["measured"]:
+        return {k: _MOUNT_SPEC[k] for k in ("mount_w", "hole_gap", "hole_d", "head_width", "thickness")}
+    return dict(
+        mount_w=mount_w if mount_w is not None else _MOUNT_SPEC["mount_w"],
+        hole_gap=hole_gap if hole_gap is not None else _MOUNT_SPEC["hole_gap"],
+        hole_d=hole_d if hole_d is not None else _MOUNT_SPEC["hole_d"],
+        head_width=head_width if head_width is not None else _MOUNT_SPEC["head_width"],
+        thickness=thickness if thickness is not None else _MOUNT_SPEC["thickness"],
+    )
+
 
 def _circle_r_from_3(a, b, c):
     """세 점을 지나는 원의 반지름(mm). 거의 일직선이면 큰 값."""
@@ -2917,8 +2943,22 @@ def _parse_obj(data):
     return verts
 
 
+def _dedup_verts(verts):
+    """정점 중복 제거 — STL은 삼각형마다 정점을 반복 저장해 같은 점이 평균 6번씩 중복됩니다.
+    중복을 없애면 메모리가 줄고, 턱선 추출(구간별 점 통계)이 특정 부위에 치우치지 않아 더 안정적입니다.
+    (소수 6자리 반올림 기준으로 같은 점을 판단 — mm·m 어느 단위여도 충분히 정밀)"""
+    seen = set()
+    out = []
+    for v in verts:
+        k = (round(v[0], 6), round(v[1], 6), round(v[2], 6))
+        if k not in seen:
+            seen.add(k)
+            out.append(v)
+    return out
+
+
 def _parse_stl(data):
-    """ASCII/바이너리 STL 모두 지원 → 정점 리스트."""
+    """ASCII/바이너리 STL 모두 지원 → 정점 리스트(중복 제거)."""
     # ASCII 판별: 앞부분에 'facet'/'vertex'가 있고 텍스트로 읽히면 ASCII
     headtxt = data[:512].decode("ascii", "ignore").lower()
     is_ascii = ("facet" in headtxt or "vertex" in headtxt) and not (len(data) > 84 and (len(data) - 84) % 50 == 0 and b"\x00" in data[:200])
@@ -2934,7 +2974,7 @@ def _parse_stl(data):
                     except Exception:
                         pass
         if verts:
-            return verts
+            return _dedup_verts(verts)
     # 바이너리 STL: 80바이트 헤더 + uint32 개수 + 삼각형당 50바이트(법선3 + 정점3×3 + 2)
     if len(data) < 84:
         return []
@@ -2945,7 +2985,7 @@ def _parse_stl(data):
         base = 84 + i * 50
         v = struct.unpack_from("<12f", data, base)
         verts.append((v[3], v[4], v[5])); verts.append((v[6], v[7], v[8])); verts.append((v[9], v[10], v[11]))
-    return verts
+    return _dedup_verts(verts)
 
 
 def _parse_ply(data):
@@ -3051,8 +3091,9 @@ def _orient_face_points(a):
     return a @ R.T                      # 새 좌표(x=좌우, y=위, z=앞)
 
 
-def _jaw2d_from_mesh(verts):
-    """3D 스캔 정점(mm 가정, Y 위·Z 앞) → 앞쪽 하단 실루엣(턱선) 2D + 턱끝 인덱스. 실패 시 None."""
+def _jaw2d_from_mesh(verts, flip_lr=False, flip_ud=False, flip_fb=False):
+    """3D 스캔 정점(mm 가정, Y 위·Z 앞) → 앞쪽 하단 실루엣(턱선) 2D + 턱끝 인덱스. 실패 시 None.
+    flip_lr/ud/fb: 자동 정렬 결과가 뒤집혔을 때 수동 보정(좌우/위아래/앞뒤 뒤집기)."""
     try:
         if len(verts) < 100:
             return None
@@ -3062,6 +3103,13 @@ def _jaw2d_from_mesh(verts):
             a *= 1000.0
         a -= a.mean(0)
         a = _orient_face_points(a)   # 임의 방향 스캔 자동 정렬(X=좌우·Y=위·Z=앞)
+        # 자동 정렬이 방향을 반대로 잡은 경우(드묾) 사용자가 체크한 축을 뒤집어 보정
+        if flip_lr:
+            a[:, 0] *= -1.0
+        if flip_ud:
+            a[:, 1] *= -1.0
+        if flip_fb:
+            a[:, 2] *= -1.0
         x, y, z = a[:, 0], a[:, 1], a[:, 2]
         zmid = np.median(z)
         front = a[z >= zmid]         # 얼굴 앞쪽 절반(코 방향)
@@ -3215,8 +3263,8 @@ def scan_head_dxf(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0,
     raw = _load_scan_image(scan_id)
     if raw is None:
         return Response(status_code=404)
-    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm, mount_w=mount_w, hole_gap=hole_gap,
-                   hole_d=hole_d, head_width=head_width, thickness=thickness)
+    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm,
+                   **_mount_kwargs(mount_w, hole_gap, hole_d, head_width, thickness))
     if cad is None:
         return Response(content="얼굴/턱선을 찾지 못했습니다.", status_code=422)
     dxf = _cad_to_dxf(cad)
@@ -3235,8 +3283,8 @@ def scan_head_page(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0,
     raw = _load_scan_image(scan_id)
     if raw is None:
         return HTMLResponse("<p style='color:#fff;background:#09090b;padding:40px'>사진을 찾을 수 없습니다.</p>", status_code=404)
-    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm, mount_w=mount_w, hole_gap=hole_gap,
-                   hole_d=hole_d, head_width=head_width, thickness=thickness)
+    cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm,
+                   **_mount_kwargs(mount_w, hole_gap, hole_d, head_width, thickness))
     if cad is None:
         return HTMLResponse("<p style='color:#fff;background:#09090b;padding:40px'>이 사진에서 얼굴/턱선을 찾지 못했어요.</p>", status_code=422)
     href = (f"/scan/{scan_id}/head.dxf?head_mm={cad['arc_len']}&ipd_mm={cad['ipd_mm']}"
@@ -3255,7 +3303,7 @@ def _head_err(msg):
 # 헤드 도면 만들기 — 3D 스캔 파일(.obj/.ply) 또는 사진(정면+좌/우) 업로드 폼
 @app.get("/head/build", response_class=HTMLResponse)
 def head_build_form():
-    return HTMLResponse("""<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+    html = """<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/><title>맞춤 헤드 도면 만들기</title>
 <style>
   body{margin:0;background:#09090b;color:#f4f4f5;font-family:-apple-system,'Malgun Gothic',sans-serif;padding:24px;}
@@ -3305,6 +3353,13 @@ def head_build_form():
   <p>아이폰 Pro LiDAR 등으로 스캔한 <b>.obj / .ply / .stl</b>(ASCII·바이너리 모두). 방향이 달라도 <b>자동 정렬</b>됩니다.</p>
   <input type="file" name="mesh" accept=".obj,.ply,.stl"/>
   <label>헤드 접촉 곡선 길이(mm)</label><input type="number" name="head_mm" value="75" step="1"/>
+  <label style="margin-top:12px">자동 정렬 수동 보정 <span class="tag">결과가 이상할 때만</span></label>
+  <p style="margin:2px 0 6px">만들어진 곡선이 이상하면(턱선이 아니라 이마 같으면) 아래를 체크해 다시 만들어보세요.</p>
+  <div class="row" style="font-size:13px;color:#d4d4d8">
+    <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" name="flip_ud" style="width:auto"/> 위아래 뒤집기</label>
+    <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" name="flip_lr" style="width:auto"/> 좌우 뒤집기</label>
+    <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" name="flip_fb" style="width:auto"/> 앞뒤 뒤집기</label>
+  </div>
   <div class="mrow"></div>
   <button type="submit">3D 파일로 헤드 도면 만들기</button>
 </form>
@@ -3322,24 +3377,37 @@ def head_build_form():
 </form>
 
 <div class="card" style="opacity:.9">
-  <h2>본체 결합부 실측치 <span class="tag">선택 — 알면 정확히 합체</span></h2>
-  <p>위 두 폼의 값이 함께 전송됩니다. 디바이스 본체 결합부 치수를 알면 아래 기본값을 바꿔주세요.</p>
-  <div class="row"><div><label>결합 돌기 폭(mm)</label><input form="" type="number" value="20" disabled></div>
-    <div><label>나사 구멍 간격(mm)</label><input type="number" value="28" disabled></div>
-    <div><label>구멍 지름(mm)</label><input type="number" value="5" disabled></div></div>
-  <p style="margin-top:8px">※ 실측치 반영은 각 폼 제출 시 <code>mount_w·hole_gap·hole_d·head_width·thickness</code> 값으로 전송됩니다(기본 20·28·5·22·8mm). 정확한 본체 치수를 주시면 기본값을 바꿔 반영해 드려요.</p>
+  <h2>본체 결합부 치수 __MOUNT_TAG__</h2>
+  <p>__MOUNT_NOTE__</p>
+  <div class="row"><div><label>결합 돌기 폭(mm)</label><input form="" type="number" value="__MW__" disabled></div>
+    <div><label>나사 구멍 간격(mm)</label><input type="number" value="__HG__" disabled></div>
+    <div><label>구멍 지름(mm)</label><input type="number" value="__HD__" disabled></div></div>
+  <p style="margin-top:8px">※ 각 폼 제출 시 <code>mount_w·hole_gap·hole_d·head_width·thickness</code>(현재 __MW__·__HG__·__HD__·__HW__·__TH__mm)가 함께 전송됩니다. 본체 실측치가 확정되면 서버 한 곳(_MOUNT_SPEC)만 바꿔 <b>모든 도면에 고정 적용</b>됩니다.</p>
 </div>
 <script>
-  // 두 폼에 결합부 실측 입력(숨김 기본값)을 넣어 함께 전송
+  // 두 폼에 결합부 치수 입력(숨김)을 넣어 함께 전송 — 값은 서버 _MOUNT_SPEC 기준
   var mrows = document.querySelectorAll('.mrow');
-  var fields = [['mount_w','결합 돌기 폭',20],['hole_gap','나사 구멍 간격',28],['hole_d','구멍 지름',5],['head_width','헤드 폭',22],['thickness','헤드 두께',8]];
+  var fields = [['mount_w',__MW__],['hole_gap',__HG__],['hole_d',__HD__],['head_width',__HW__],['thickness',__TH__]];
   mrows.forEach(function(m){
     fields.forEach(function(f){
-      var i=document.createElement('input'); i.type='hidden'; i.name=f[0]; i.value=f[2]; m.appendChild(i);
+      var i=document.createElement('input'); i.type='hidden'; i.name=f[0]; i.value=f[1]; m.appendChild(i);
     });
   });
 </script>
-</body></html>""")
+</body></html>"""
+    # 결합부 치수는 서버 한 곳(_MOUNT_SPEC)의 값을 폼에 그대로 반영합니다.
+    sp = _MOUNT_SPEC
+    if sp["measured"]:
+        tag = '<span class="tag">실측치 고정됨 ✓</span>'
+        note = "디바이스 본체 실측치가 확정되어 아래 값으로 <b>고정</b>됩니다(입력값 무시). 모든 도면이 본체와 정확히 합체돼요."
+    else:
+        tag = '<span class="tag">기본값 — 실측 확정 전</span>'
+        note = "아직 본체 실측 전이라 기본값을 사용합니다. 정확한 본체 치수가 확정되면 서버에 고정 반영해 드려요."
+    html = (html.replace("__MOUNT_TAG__", tag).replace("__MOUNT_NOTE__", note)
+                .replace("__MW__", str(sp["mount_w"])).replace("__HG__", str(sp["hole_gap"]))
+                .replace("__HD__", str(sp["hole_d"])).replace("__HW__", str(sp["head_width"]))
+                .replace("__TH__", str(sp["thickness"])))
+    return HTMLResponse(html)
 
 
 # 헤드 도면 만들기 — 업로드 처리(3D 파일 우선, 없으면 사진)
@@ -3348,19 +3416,22 @@ async def head_build(mesh: UploadFile = File(None), front: UploadFile = File(Non
                      left: UploadFile = File(None), right: UploadFile = File(None),
                      head_mm: float = Form(75.0), ipd_mm: float = Form(63.0),
                      mount_w: float = Form(20.0), hole_gap: float = Form(28.0), hole_d: float = Form(5.0),
-                     head_width: float = Form(22.0), thickness: float = Form(8.0)):
-    mk = dict(mount_w=mount_w, hole_gap=hole_gap, hole_d=hole_d, head_width=head_width, thickness=thickness)
+                     head_width: float = Form(22.0), thickness: float = Form(8.0),
+                     flip_lr: str = Form(None), flip_ud: str = Form(None), flip_fb: str = Form(None)):
+    mk = _mount_kwargs(mount_w, hole_gap, hole_d, head_width, thickness)
     try:
         if mesh is not None and getattr(mesh, "filename", ""):
             data = await mesh.read()
             verts = _parse_mesh_vertices(data, mesh.filename)
             if not verts:
                 return _head_err("3D 파일을 읽지 못했어요. OBJ · PLY · STL(ASCII/바이너리)을 지원합니다.")
-            jr = _jaw2d_from_mesh(verts)
+            jr = _jaw2d_from_mesh(verts, flip_lr=bool(flip_lr), flip_ud=bool(flip_ud), flip_fb=bool(flip_fb))
             if jr is None:
                 return _head_err("3D 스캔에서 턱선을 찾지 못했어요. 얼굴이 포함된 스캔인지 확인해주세요(자동 정렬 적용됨).")
             jaw, chin = jr
-            cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=f"3D 스캔 파일({mesh.filename})", **mk)
+            flips = "·".join(t for t, on in (("좌우", flip_lr), ("상하", flip_ud), ("앞뒤", flip_fb)) if on)
+            src = f"3D 스캔 파일({mesh.filename})" + (f" · 수동 뒤집기({flips})" if flips else "")
+            cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=src, **mk)
         elif front is not None and getattr(front, "filename", ""):
             f = await front.read()
             lf = await left.read() if (left and getattr(left, "filename", "")) else None
@@ -3398,8 +3469,7 @@ async def head_build_json(front: UploadFile = File(...), left: UploadFile = File
             return {"ok": False, "message": "정면 사진에서 얼굴/턱선을 찾지 못했어요."}
         jaw, chin, used = jr
         cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=f"사진 {len(used)}장 ({'·'.join(used)})",
-                               mount_w=mount_w, hole_gap=hole_gap, hole_d=hole_d,
-                               head_width=head_width, thickness=thickness)
+                               **_mount_kwargs(mount_w, hole_gap, hole_d, head_width, thickness))
         if cad is None:
             return {"ok": False, "message": "헤드 도면 생성에 실패했어요."}
         dxf = _cad_to_dxf(cad)
