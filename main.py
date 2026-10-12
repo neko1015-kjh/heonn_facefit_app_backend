@@ -2788,7 +2788,8 @@ def _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진",
     if len(seg) < 3:
         return None
 
-    # 현(chord) 기준으로 회전·이동: 현을 x축에, 접촉 곡선이 위로 볼록(∩)하게 정규화
+    # 현(chord) 기준으로 회전·이동: 현을 x축에, 접촉 곡선이 오목(∪)하게 정규화
+    # (턱선은 볼록 → 헤드 접촉면은 그 반대로 오목해야 턱이 쏙 들어감. 헤드 몸통은 곡선 아래=얼굴 바깥쪽)
     sx, sy = seg[0]; ex, ey = seg[-1]
     chord = math.hypot(ex - sx, ey - sy)
     ang = math.atan2(ey - sy, ex - sx)
@@ -2797,7 +2798,7 @@ def _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진",
     for (x, y) in seg:
         dx, dy = x - sx, y - sy
         norm.append((dx * cA - dy * sA - chord / 2, dx * sA + dy * cA))
-    if norm[len(norm) // 2][1] < 0:
+    if norm[len(norm) // 2][1] > 0:
         norm = [(x, -y) for (x, y) in norm]
 
     sagitta = round(max(abs(y) for (_, y) in norm), 1)
