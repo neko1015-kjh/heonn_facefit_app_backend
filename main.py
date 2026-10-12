@@ -16,6 +16,7 @@ import urllib.error
 from datetime import datetime
 
 import db  # DB 연결 도우미 (환경에 따라 PostgreSQL/SQLite 자동 선택)
+import heonn_plate  # 헤온 유기판 맞춤 설계 (원본 외곽선은 서버 비밀 설정 HEONN_PLATE)
 
 import cv2
 import numpy as np
@@ -2833,6 +2834,19 @@ def _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진",
     }
 
 
+_PLATE_MISSING_MSG = "헤온 유기판 원본 데이터가 서버에 설정되지 않았어요(HEONN_PLATE). 관리자에게 문의해주세요."
+
+
+def _design_cad(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진", **mount):
+    """턱선 → 헤온 유기판 맞춤 설계. 바디에 조립되는 안쪽 선·나사 구멍은 원본 그대로,
+    얼굴에 닿는 오목면 두 곳만 얼굴 곡률에 맞춥니다. 원본 데이터가 없으면 None.
+    (head_mm·mount 값은 예전 범용 헤드용 — 헤온 판에서는 원본 치수를 쓰므로 사용하지 않음)"""
+    plate = heonn_plate.load_plate()
+    if plate is None:
+        return None
+    return heonn_plate.design_plate(jaw, chin_idx, plate, source=source, ipd_mm=ipd_mm)
+
+
 def _jaw_cad(raw, head_mm=75.0, ipd_mm=63.0, **mount):
     """저장된 사진 → 턱선에 1:1 밀착하는 '헤드'(디바이스 접촉부) 설계. 실패 시 None.
     head_mm: 헤드 접촉 곡선 길이(디바이스 크기) / ipd_mm: 스케일 기준 / **mount: 본체 결합부 실측치."""
@@ -2869,7 +2883,7 @@ def _jaw_cad(raw, head_mm=75.0, ipd_mm=63.0, **mount):
         # 턱선 전체 점(mm, y 위로). 순서: 왼귀 … 턱끝(152) … 오른귀
         jaw = [(P(i)[0] * mm, -P(i)[1] * mm) for i in _JAW_IDS]
         chin_idx = _JAW_IDS.index(152)
-        return _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진", **mount)
+        return _design_cad(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진", **mount)
     except Exception as e:
         print("헤드 도면 생성 실패:", e)
         return None
@@ -3140,6 +3154,8 @@ def _jaw2d_from_mesh(verts, flip_lr=False, flip_ud=False, flip_fb=False):
 
 def _cad_to_dxf(cad):
     """헤드 도면 데이터를 최소 DXF(R12, LINE/TEXT)로 변환합니다. (AutoCAD·Fusion 등에서 열림)"""
+    if cad.get("kind") == "heonn_plate":
+        return heonn_plate.plate_to_dxf(cad)
     ent = []
 
     def line(x1, y1, x2, y2, layer):
@@ -3184,8 +3200,65 @@ def _load_scan_image(scan_id):
     return bytes(row[0]) if row and row[0] is not None else None
 
 
+def _render_plate_page(cad, dxf_href):
+    """헤온 유기판 맞춤 설계 → 미리보기 HTML(원본 대비 평면도 + 오목면별 측정값 + DXF 링크)."""
+    rows = ""
+    for n in cad["notches"]:
+        lim = ' <span style="color:#f87171">· 안전 한도 적용</span>' if n["limited"] else ""
+        rows += (f'<tr><td class="k" colspan="2" style="color:#fcd34d;padding-top:14px">{n["label"]}{lim}</td></tr>'
+                 f'<tr><td class="k">얼굴 곡률 반경 (측정)</td><td class="v">R {n["face_radius"]} mm</td></tr>'
+                 f'<tr><td class="k">홈 반경 · 깊이 (원본 → 맞춤)</td><td class="v">R {n["orig_radius"]} → {n["radius"]} · '
+                 f'{n["orig_depth"]} → {n["depth"]} mm</td></tr>'
+                 f'<tr><td class="k">홈 폭 · 남은 최소 띠 폭</td><td class="v">{n["chord"]} · {n["min_band"]} mm</td></tr>')
+    holes = cad["holes"]
+    src = cad.get("source", "정면 사진")
+    return f"""<!doctype html><html lang="ko"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>HeOnn 맞춤 유기판 도면</title>
+<style>
+  body {{ margin:0; background:#09090b; color:#f4f4f5; font-family:-apple-system,'Malgun Gothic',sans-serif; padding:24px 16px; }}
+  h1 {{ color:#fbbf24; font-size:20px; text-align:center; }}
+  .sub {{ color:#a1a1aa; font-size:13px; text-align:center; margin-bottom:6px; }}
+  .src {{ color:#34d399; font-size:12px; text-align:center; margin-bottom:16px; }}
+  .card {{ max-width:460px; margin:0 auto; background:#18181b; border:1px solid #27272a; border-radius:16px; padding:18px; }}
+  svg {{ display:block; margin:0 auto; background:#0d0d10; border-radius:12px; }}
+  table {{ width:100%; border-collapse:collapse; margin-top:12px; font-size:13.5px; }}
+  td {{ padding:7px 6px; border-bottom:1px solid #27272a; }}
+  td.k {{ color:#a1a1aa; }} td.v {{ color:#fcd34d; text-align:right; font-weight:700; }}
+  .dl {{ display:block; text-align:center; margin-top:18px; background:#f59e0b; color:#09090b; font-weight:700; padding:13px; border-radius:12px; text-decoration:none; }}
+  .note {{ color:#71717a; font-size:11.5px; line-height:1.6; margin-top:14px; }}
+  .use {{ background:#0d0d10; border:1px solid #27272a; border-radius:12px; padding:12px 14px; margin-top:16px; font-size:12.5px; color:#a1a1aa; line-height:1.7; }}
+  .use b {{ color:#fcd34d; }}
+  .lg {{ display:flex; gap:14px; justify-content:center; flex-wrap:wrap; font-size:12px; color:#a1a1aa; margin-top:8px; }}
+  .lg i {{ width:18px; height:0; border-top:3px solid; display:inline-block; vertical-align:middle; margin-right:5px; }}
+  a {{ color:#fcd34d; }}
+</style></head><body>
+<h1>HeOnn 맞춤 유기판 도면 (평면도)</h1>
+<div class="sub">헤온 바디에 그대로 조립 — 얼굴에 닿는 오목면 두 곳만 이 얼굴에 맞춤</div>
+<div class="src">📐 측정 소스: {src} · 기준 원본: {cad.get('plate_name', '')}</div>
+<div class="card">
+  {heonn_plate.plate_svg(cad)}
+  <div class="lg"><span><i style="border-color:#fbbf24"></i>맞춤으로 바뀐 구간</span><span><i style="border-color:#d97706"></i>유기판 외곽</span><span><i style="border-color:#71717a;border-top-style:dashed"></i>원본 바깥선</span></div>
+  <table>
+    {rows}
+    <tr><td class="k" style="padding-top:14px">바디 조립부 (안쪽 선 · 나사 구멍 {len(holes)}개 ⌀{holes[0]['d'] if holes else '-'})</td><td class="v" style="padding-top:14px">원본 그대로</td></tr>
+    <tr><td class="k">판 두께 · 전체 최소 띠 폭</td><td class="v">{cad['thickness']} · {cad['head_width']} mm</td></tr>
+  </table>
+  <a class="dl" href="{dxf_href}" download="heonn_plate.dxf">📐 맞춤 유기판 도면(DXF) 내려받기</a>
+  <div class="use">
+    <b>위쪽 홈</b> — 턱끝 중앙에 홈을 대고 <b>턱선을 따라 귀 쪽으로</b> 쓸어 올립니다. 홈 반경이 이 사람 턱끝 곡률에 맞춰져 감싸듯 밀착됩니다.<br/>
+    <b>왼쪽 긴 면</b> — 턱끝→귀 방향 턱선·볼을 길게 쓸어내리는 면으로, 턱선 곡률에 맞췄습니다. 피부에 <b>약 15~45°</b>로 눕혀 사용.
+  </div>
+  <div class="note">※ 좌표는 디자이너 원본 CAD(Final-M-08)와 같은 위치(mm)라 원본 위에 그대로 겹쳐 쓸 수 있어요. DXF 레이어: PLATE_OUTLINE(가공 외곽) · CUSTOM_ZONE(바뀐 구간) · ORIGINAL_EDGE(원본 바깥선) · HOLES(나사 구멍). 모서리 라운드 등 입체 형상은 원본 3D 모델에서 이 외곽으로 다시 적용해 주세요.
+  안전 한도: 최소 띠 폭 {heonn_plate.MIN_BAND_MM}mm · 나사 구멍~테두리 {heonn_plate.MIN_HOLE_EDGE_MM}mm (넘으면 깊이를 자동으로 줄임). 사진은 눈 사이 {cad['ipd_mm']}mm 기준 환산이라 3D 스캔이 더 정확합니다. <a href="/head/build">▶ 다른 사진/3D 파일로 만들기</a></div>
+</div>
+</body></html>"""
+
+
 def _render_head_page(cad, dxf_href):
     """헤드 CAD 데이터 → 미리보기 HTML(평면도 SVG + 측정값 + 사용법 + DXF 링크). 공용."""
+    if cad.get("kind") == "heonn_plate":
+        return _render_plate_page(cad, dxf_href)
     allpts = cad["contact"] + cad["inner"] + cad["mount_tongue"] + [(hx, hy) for (hx, hy, _) in cad["mount_holes"]]
     minx = min(p[0] for p in allpts); maxx = max(p[0] for p in allpts)
     miny = min(p[1] for p in allpts); maxy = max(p[1] for p in allpts)
@@ -3287,10 +3360,9 @@ def scan_head_page(scan_id: int, head_mm: float = 75.0, ipd_mm: float = 63.0,
     cad = _jaw_cad(raw, head_mm=head_mm, ipd_mm=ipd_mm,
                    **_mount_kwargs(mount_w, hole_gap, hole_d, head_width, thickness))
     if cad is None:
-        return HTMLResponse("<p style='color:#fff;background:#09090b;padding:40px'>이 사진에서 얼굴/턱선을 찾지 못했어요.</p>", status_code=422)
-    href = (f"/scan/{scan_id}/head.dxf?head_mm={cad['arc_len']}&ipd_mm={cad['ipd_mm']}"
-            f"&mount_w={cad['mount_w']}&hole_gap={cad['hole_gap']}&hole_d={cad['hole_d']}"
-            f"&head_width={cad['head_width']}&thickness={cad['thickness']}")
+        msg = _PLATE_MISSING_MSG if heonn_plate.load_plate() is None else "이 사진에서 얼굴/턱선을 찾지 못했어요."
+        return HTMLResponse(f"<p style='color:#fff;background:#09090b;padding:40px'>{msg}</p>", status_code=422)
+    href = f"/scan/{scan_id}/head.dxf?ipd_mm={cad['ipd_mm']}"
     return HTMLResponse(_render_head_page(cad, href))
 
 
@@ -3320,7 +3392,7 @@ def head_build_form():
   .tag{color:#34d399;font-size:11px;}
 </style></head><body>
 <h1>HeOnn 맞춤 헤드 도면 만들기</h1>
-<div class="sub">3D 스캔 파일(가장 정확) 또는 사진(정면+좌/우)으로 헤드 CAD를 만듭니다</div>
+<div class="sub">3D 스캔 파일(가장 정확) 또는 사진(정면+좌/우)으로 헤온 바디에 맞는 <b>맞춤 유기판 도면</b>을 만듭니다</div>
 
 <div class="card">
   <h2>📸 사진 촬영 가이드 <span class="tag">정확도↑</span></h2>
@@ -3353,7 +3425,6 @@ def head_build_form():
   <h2>① 3D 스캔 파일 <span class="tag">가장 정확 (실척 mm)</span></h2>
   <p>아이폰 Pro LiDAR 등으로 스캔한 <b>.obj / .ply / .stl</b>(ASCII·바이너리 모두). 방향이 달라도 <b>자동 정렬</b>됩니다.</p>
   <input type="file" name="mesh" accept=".obj,.ply,.stl"/>
-  <label>헤드 접촉 곡선 길이(mm)</label><input type="number" name="head_mm" value="75" step="1"/>
   <label style="margin-top:12px">자동 정렬 수동 보정 <span class="tag">결과가 이상할 때만</span></label>
   <p style="margin:2px 0 6px">만들어진 곡선이 이상하면(턱선이 아니라 이마 같으면) 아래를 체크해 다시 만들어보세요.</p>
   <div class="row" style="font-size:13px;color:#d4d4d8">
@@ -3362,7 +3433,7 @@ def head_build_form():
     <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" name="flip_fb" style="width:auto"/> 앞뒤 뒤집기</label>
   </div>
   <div class="mrow"></div>
-  <button type="submit">3D 파일로 헤드 도면 만들기</button>
+  <button type="submit">3D 파일로 맞춤 유기판 도면 만들기</button>
 </form>
 
 <form class="card" method="post" action="/head/build" enctype="multipart/form-data">
@@ -3371,19 +3442,15 @@ def head_build_form():
   <label>정면 사진 *</label><input type="file" name="front" accept="image/*"/>
   <div class="row"><div><label>좌측</label><input type="file" name="left" accept="image/*"/></div>
     <div><label>우측</label><input type="file" name="right" accept="image/*"/></div></div>
-  <div class="row"><div><label>헤드 크기(mm)</label><input type="number" name="head_mm" value="75" step="1"/></div>
-    <div><label>눈 사이(mm)</label><input type="number" name="ipd_mm" value="63" step="0.5"/></div></div>
+  <label>눈동자 사이 거리(mm) <span class="tag">알면 입력 — 크기 정확도↑ (안경점 PD값)</span></label>
+  <input type="number" name="ipd_mm" value="63" step="0.5"/>
   <div class="mrow"></div>
-  <button type="submit">사진으로 헤드 도면 만들기</button>
+  <button type="submit">사진으로 맞춤 유기판 도면 만들기</button>
 </form>
 
 <div class="card" style="opacity:.9">
-  <h2>본체 결합부 치수 __MOUNT_TAG__</h2>
-  <p>__MOUNT_NOTE__</p>
-  <div class="row"><div><label>결합 돌기 폭(mm)</label><input form="" type="number" value="__MW__" disabled></div>
-    <div><label>나사 구멍 간격(mm)</label><input type="number" value="__HG__" disabled></div>
-    <div><label>구멍 지름(mm)</label><input type="number" value="__HD__" disabled></div></div>
-  <p style="margin-top:8px">※ 각 폼 제출 시 <code>mount_w·hole_gap·hole_d·head_width·thickness</code>(현재 __MW__·__HG__·__HD__·__HW__·__TH__mm)가 함께 전송됩니다. 본체 실측치가 확정되면 서버 한 곳(_MOUNT_SPEC)만 바꿔 <b>모든 도면에 고정 적용</b>됩니다.</p>
+  <h2>헤온 바디 기준 <span class="tag">원본 CAD(Final-M-08) 적용</span></h2>
+  <p>도면은 헤온 바디에 나사 4개로 고정되는 <b>방짜유기 판 원본</b>을 기준으로 만들어요. 바디에 닿는 안쪽 선·나사 구멍은 <b>원본 그대로</b>라 그대로 조립되고, 얼굴에 닿는 <b>오목면 두 곳(위쪽 홈·왼쪽 긴 면)</b>만 이 얼굴 곡률에 맞춰 깊이가 바뀝니다.</p>
 </div>
 <script>
   // 두 폼에 결합부 치수 입력(숨김)을 넣어 함께 전송 — 값은 서버 _MOUNT_SPEC 기준
@@ -3432,7 +3499,7 @@ async def head_build(mesh: UploadFile = File(None), front: UploadFile = File(Non
             jaw, chin = jr
             flips = "·".join(t for t, on in (("좌우", flip_lr), ("상하", flip_ud), ("앞뒤", flip_fb)) if on)
             src = f"3D 스캔 파일({mesh.filename})" + (f" · 수동 뒤집기({flips})" if flips else "")
-            cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=src, **mk)
+            cad = _design_cad(jaw, chin, head_mm, ipd_mm, source=src, **mk)
         elif front is not None and getattr(front, "filename", ""):
             f = await front.read()
             lf = await left.read() if (left and getattr(left, "filename", "")) else None
@@ -3441,11 +3508,11 @@ async def head_build(mesh: UploadFile = File(None), front: UploadFile = File(Non
             if jr is None:
                 return _head_err("정면 사진에서 얼굴/턱선을 찾지 못했어요.")
             jaw, chin, used = jr
-            cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=f"사진 {len(used)}장 ({'·'.join(used)})", **mk)
+            cad = _design_cad(jaw, chin, head_mm, ipd_mm, source=f"사진 {len(used)}장 ({'·'.join(used)})", **mk)
         else:
             return _head_err("3D 파일 또는 정면 사진을 올려주세요.")
         if cad is None:
-            return _head_err("헤드 도면 생성에 실패했어요.")
+            return _head_err(_PLATE_MISSING_MSG if heonn_plate.load_plate() is None else "헤드 도면 생성에 실패했어요.")
         dxf = _cad_to_dxf(cad)
         b64 = base64.b64encode(dxf.encode("utf-8")).decode("ascii")
         return HTMLResponse(_render_head_page(cad, f"data:application/dxf;base64,{b64}"))
@@ -3469,14 +3536,17 @@ async def head_build_json(front: UploadFile = File(...), left: UploadFile = File
         if jr is None:
             return {"ok": False, "message": "정면 사진에서 얼굴/턱선을 찾지 못했어요."}
         jaw, chin, used = jr
-        cad = _head_from_jaw2d(jaw, chin, head_mm, ipd_mm, source=f"사진 {len(used)}장 ({'·'.join(used)})",
-                               **_mount_kwargs(mount_w, hole_gap, hole_d, head_width, thickness))
+        cad = _design_cad(jaw, chin, head_mm, ipd_mm, source=f"사진 {len(used)}장 ({'·'.join(used)})",
+                          **_mount_kwargs(mount_w, hole_gap, hole_d, head_width, thickness))
         if cad is None:
-            return {"ok": False, "message": "헤드 도면 생성에 실패했어요."}
+            return {"ok": False, "message": _PLATE_MISSING_MSG if heonn_plate.load_plate() is None
+                    else "헤드 도면 생성에 실패했어요."}
         dxf = _cad_to_dxf(cad)
         keys = ("arc_len", "radius", "min_radius", "chord", "sagitta", "head_width", "thickness", "mount_w", "hole_gap", "hole_d")
         return {"ok": True, "views_used": used,
                 "measurements": {k: cad[k] for k in keys},
+                "notches": [{k: n[k] for k in ("id", "label", "chord", "face_radius", "orig_radius", "radius",
+                                                "orig_depth", "depth", "min_band", "limited")} for n in cad["notches"]],
                 "dxf_base64": base64.b64encode(dxf.encode("utf-8")).decode("ascii")}
     except Exception as e:
         print("헤드 빌드(JSON) 실패:", e)
