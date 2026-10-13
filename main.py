@@ -3249,7 +3249,7 @@ def _render_plate_page(cad, dxf_href):
 <div class="src">📐 측정 소스: {src} · 기준 원본: {cad.get('plate_name', '')}</div>
 <div class="card">
   <div class="tabs"><button class="tb on" data-t="t3d">🧊 3D 보기</button><button class="tb" data-t="t2d">📐 평면도</button></div>
-  <div id="t3d">{heonn_plate.plate_viewer_html(cad, cad['thickness'])}</div>
+  <div id="t3d">{heonn_plate.plate_viewer_html(cad)}</div>
   <div id="t2d" style="display:none">{heonn_plate.plate_svg(cad)}
   <div class="lg"><span><i style="border-color:#fbbf24"></i>맞춤으로 바뀐 구간</span><span><i style="border-color:#d97706"></i>유기판 외곽</span><span><i style="border-color:#71717a;border-top-style:dashed"></i>원본 바깥선</span></div></div>
   <script>
@@ -3262,8 +3262,8 @@ def _render_plate_page(cad, dxf_href):
   <table>
     {rows}
     <tr><td class="k" style="padding-top:14px">바디 조립부 (안쪽 선 · 나사 구멍 {len(holes)}개 ⌀{holes[0]['d'] if holes else '-'})</td><td class="v" style="padding-top:14px">원본 그대로</td></tr>
-    <tr><td class="k">판 두께 · 전체 최소 띠 폭</td><td class="v">{cad['thickness']} · {cad['head_width']} mm</td></tr>
-    <tr><td class="k">얼굴 닿는 바깥 모서리 (위·아래)</td><td class="v">완전 라운드 R {heonn_plate.EDGE_ROUND_MM:g} mm</td></tr>
+    <tr><td class="k">전체 최소 띠 폭 (가운데 높이 기준선)</td><td class="v">{cad['head_width']} mm</td></tr>
+    <tr><td class="k">얼굴 닿는 바깥 표면</td><td class="v">원본 CAD 둥근 단면 그대로 (직각 모서리 없음)</td></tr>
   </table>
   <a class="dl" href="{dxf_href}" download="heonn_plate.dxf">📐 맞춤 유기판 도면(DXF) 내려받기</a>
   <div class="use">
