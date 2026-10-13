@@ -3,9 +3,9 @@
 원리
 - 헤온 바디에 나사 4개로 고정되는 '방짜유기 판'의 원본 외곽선(디자이너 CAD, Final-M-08)을 기준으로 삼습니다.
 - 바디에 붙는 안쪽 선·나사 구멍은 절대 바꾸지 않습니다 → 어떤 사람 도면이든 바디에 그대로 조립됩니다.
-- 얼굴에 닿는 바깥 테두리 중 '오목한 두 곳'만 그 사람 얼굴 곡률에 맞게 깊이를 조절합니다.
-    · chin  : 위쪽 홈(폭 약 36mm) — 턱끝·턱선을 감싸는 노치 (괄사 '노치' 벤치마킹)
-    · cheek : 왼쪽 긴 오목면(폭 약 60mm) — 턱끝→귀 방향으로 쓸어내리는 긴 면
+- 얼굴에 닿는 바깥 테두리의 '오목한 두 곳' 중 측정 가능한 곳만 그 사람 얼굴 곡률에 맞게 깊이를 조절합니다.
+    · chin  : 위쪽 홈(폭 약 36mm) — 턱뼈 단면을 감싸는 노치. 정면 윤곽으로는 잴 수 없어 현재 원본 유지
+    · cheek : 왼쪽 긴 오목면(폭 약 60mm) — 턱끝→귀 방향 턱선 곡률에 맞춤
 - 바뀐 구간 양 끝은 원래 선과 기울기까지 부드럽게 이어집니다(꺾임 없음).
 - 판이 너무 얇아지지 않게(최소 띠 폭) 안전 한도를 넘으면 자동으로 깊이를 줄이고 표시합니다.
 
@@ -23,6 +23,9 @@ MIN_BAND_MM = 6.0
 MIN_HOLE_EDGE_MM = 5.5
 # 오목면 최소 깊이(mm) — 얼굴이 아주 평평해도 홈 모양은 남깁니다
 MIN_SAGITTA_MM = 0.5
+# 얼굴에 맞춰 바꾸는 오목면. 위쪽 홈(chin)은 턱뼈 '단면'을 감싸는 홈이라 정면 윤곽(사진·스캔 실루엣)으로는
+# 잴 수 없어 원본(R≈30, 디자이너 설계)을 그대로 둡니다. 단면 측정이 생기면 여기에 "chin"을 추가하세요.
+CUSTOM_NOTCHES = ("cheek",)
 # 바뀐 구간 양 끝을 부드럽게 잇는 비율(구간 길이의 앞뒤 20%)
 _BLEND = 0.2
 
@@ -220,6 +223,16 @@ def design_plate(jaw, chin_idx, plate, source="정면 사진", ipd_mm=63.0):
         c, s0, _ = _chord_sagitta(seg)
         s0 = abs(s0)
         R0 = _radius_from(c, s0)
+        if nt["id"] not in CUSTOM_NOTCHES:
+            # 원본 유지 구간 — 측정값 없이 원래 모양 그대로
+            notches.append({
+                "id": nt["id"], "label": nt["label"], "i0": i0, "i1": i1, "chord": round(c, 1),
+                "orig_depth": round(s0, 1), "orig_radius": round(R0, 1), "face_radius": None,
+                "depth": round(s0, 1), "radius": round(R0, 1),
+                "min_band": round(min(_poly_dist(p, inner) for p in seg), 1),
+                "limited": False, "fixed": True,
+            })
+            continue
         Rf = face_radius(jaw, chin_idx, nt["id"], c)
         if Rf is None:
             return None
@@ -250,7 +263,7 @@ def design_plate(jaw, chin_idx, plate, source="정면 사진", ipd_mm=63.0):
             "orig_depth": round(s0, 1), "orig_radius": round(R0, 1),
             "face_radius": round(Rf, 1),
             "depth": round(abs(s1), 1), "radius": round(_radius_from(c1, s1), 1),
-            "min_band": round(w, 1), "limited": limited,
+            "min_band": round(w, 1), "limited": limited, "fixed": False,
         })
     band_all = min(_poly_dist(p, inner) for k, p in enumerate(new_outer) if 20 < k < len(new_outer) - 20)
     by = {n["id"]: n for n in notches}
@@ -298,16 +311,20 @@ def plate_to_dxf(cad):
     poly(outline + [outline[0]], "PLATE_OUTLINE")
     poly(cad["orig_outer"], "ORIGINAL_EDGE")
     for n in cad["notches"]:
-        poly(cad["outer"][n["i0"]:n["i1"] + 1], "CUSTOM_ZONE")
+        if not n.get("fixed"):
+            poly(cad["outer"][n["i0"]:n["i1"] + 1], "CUSTOM_ZONE")
     for h in cad["holes"]:
         ent.append(f"0\nCIRCLE\n8\nHOLES\n10\n{h['x']:.3f}\n20\n{h['y']:.3f}\n30\n0\n40\n{h['d'] / 2:.3f}\n")
     xs = [p[0] for p in outline]; ys = [p[1] for p in outline]
     x0, y0 = min(xs), min(ys) - 10
     text(x0, y0, 4.0, "HeOnn custom brass plate - plan view (mm), same coords as Final-M-08")
     for k, n in enumerate(cad["notches"]):
-        text(x0, y0 - 7 - 6 * k, 3.0,
-             f"{n['id']}: chord={n['chord']} depth {n['orig_depth']}->{n['depth']} R {n['orig_radius']}->{n['radius']}"
-             f" (face R={n['face_radius']}) minBand={n['min_band']}{' LIMITED' if n['limited'] else ''}")
+        if n.get("fixed"):
+            msg = f"{n['id']}: ORIGINAL kept (chord={n['chord']} depth={n['depth']} R={n['radius']})"
+        else:
+            msg = (f"{n['id']}: chord={n['chord']} depth {n['orig_depth']}->{n['depth']} R {n['orig_radius']}->{n['radius']}"
+                   f" (face R={n['face_radius']}) minBand={n['min_band']}{' LIMITED' if n['limited'] else ''}")
+        text(x0, y0 - 7 - 6 * k, 3.0, msg)
     body = "".join(ent)
     return "0\nSECTION\n2\nENTITIES\n" + body + "0\nENDSEC\n0\nEOF\n"
 
@@ -332,6 +349,8 @@ def plate_svg(cad, W=420, H=480, pad=24):
     parts = [f'<path d="{d(outline, True)}" fill="rgba(245,158,11,0.16)" stroke="#d97706" stroke-width="1.4"/>',
              f'<path d="{d(cad["orig_outer"])}" fill="none" stroke="#71717a" stroke-width="1.2" stroke-dasharray="4 3"/>']
     for n in cad["notches"]:
+        if n.get("fixed"):
+            continue
         parts.append(f'<path d="{d(cad["outer"][n["i0"]:n["i1"] + 1])}" fill="none" stroke="#fbbf24" '
                      f'stroke-width="4.5" stroke-linecap="round"/>')
     for h in cad["holes"]:

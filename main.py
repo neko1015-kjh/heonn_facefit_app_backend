@@ -3204,6 +3204,14 @@ def _render_plate_page(cad, dxf_href):
     """헤온 유기판 맞춤 설계 → 미리보기 HTML(원본 대비 평면도 + 오목면별 측정값 + DXF 링크)."""
     rows = ""
     for n in cad["notches"]:
+        if n.get("fixed"):
+            rows += (f'<tr><td class="k" colspan="2" style="color:#fcd34d;padding-top:14px">{n["label"]}'
+                     f' <span style="color:#a1a1aa">· 원본 유지</span></td></tr>'
+                     f'<tr><td class="k">홈 반경 · 깊이 · 폭 (디자이너 원본)</td><td class="v">R {n["radius"]} · '
+                     f'{n["depth"]} · {n["chord"]} mm</td></tr>'
+                     f'<tr><td class="k" colspan="2" style="font-size:11.5px">턱뼈 단면을 감싸는 홈이라 정면 윤곽으로는 '
+                     f'잴 수 없어 원본 설계를 그대로 씁니다.</td></tr>')
+            continue
         lim = ' <span style="color:#f87171">· 안전 한도 적용</span>' if n["limited"] else ""
         rows += (f'<tr><td class="k" colspan="2" style="color:#fcd34d;padding-top:14px">{n["label"]}{lim}</td></tr>'
                  f'<tr><td class="k">얼굴 곡률 반경 (측정)</td><td class="v">R {n["face_radius"]} mm</td></tr>'
@@ -3234,7 +3242,7 @@ def _render_plate_page(cad, dxf_href):
   a {{ color:#fcd34d; }}
 </style></head><body>
 <h1>HeOnn 맞춤 유기판 도면 (평면도)</h1>
-<div class="sub">헤온 바디에 그대로 조립 — 얼굴에 닿는 오목면 두 곳만 이 얼굴에 맞춤</div>
+<div class="sub">헤온 바디에 그대로 조립 — 얼굴에 닿는 왼쪽 긴 오목면을 이 얼굴 턱선에 맞춤</div>
 <div class="src">📐 측정 소스: {src} · 기준 원본: {cad.get('plate_name', '')}</div>
 <div class="card">
   {heonn_plate.plate_svg(cad)}
@@ -3246,7 +3254,7 @@ def _render_plate_page(cad, dxf_href):
   </table>
   <a class="dl" href="{dxf_href}" download="heonn_plate.dxf">📐 맞춤 유기판 도면(DXF) 내려받기</a>
   <div class="use">
-    <b>위쪽 홈</b> — 턱끝 중앙에 홈을 대고 <b>턱선을 따라 귀 쪽으로</b> 쓸어 올립니다. 홈 반경이 이 사람 턱끝 곡률에 맞춰져 감싸듯 밀착됩니다.<br/>
+    <b>위쪽 홈</b> — 턱끝 중앙에 홈을 대고 <b>턱선을 따라 귀 쪽으로</b> 쓸어 올립니다. 턱뼈 모서리를 감싸도록 디자이너가 설계한 원본 홈입니다.<br/>
     <b>왼쪽 긴 면</b> — 턱끝→귀 방향 턱선·볼을 길게 쓸어내리는 면으로, 턱선 곡률에 맞췄습니다. 피부에 <b>약 15~45°</b>로 눕혀 사용.
   </div>
   <div class="note">※ 좌표는 디자이너 원본 CAD(Final-M-08)와 같은 위치(mm)라 원본 위에 그대로 겹쳐 쓸 수 있어요. DXF 레이어: PLATE_OUTLINE(가공 외곽) · CUSTOM_ZONE(바뀐 구간) · ORIGINAL_EDGE(원본 바깥선) · HOLES(나사 구멍). 모서리 라운드 등 입체 형상은 원본 3D 모델에서 이 외곽으로 다시 적용해 주세요.
@@ -3450,7 +3458,7 @@ def head_build_form():
 
 <div class="card" style="opacity:.9">
   <h2>헤온 바디 기준 <span class="tag">원본 CAD(Final-M-08) 적용</span></h2>
-  <p>도면은 헤온 바디에 나사 4개로 고정되는 <b>방짜유기 판 원본</b>을 기준으로 만들어요. 바디에 닿는 안쪽 선·나사 구멍은 <b>원본 그대로</b>라 그대로 조립되고, 얼굴에 닿는 <b>오목면 두 곳(위쪽 홈·왼쪽 긴 면)</b>만 이 얼굴 곡률에 맞춰 깊이가 바뀝니다.</p>
+  <p>도면은 헤온 바디에 나사 4개로 고정되는 <b>방짜유기 판 원본</b>을 기준으로 만들어요. 바디에 닿는 안쪽 선·나사 구멍은 <b>원본 그대로</b>라 그대로 조립되고, 얼굴에 닿는 <b>왼쪽 긴 오목면</b>이 이 얼굴 턱선 곡률에 맞춰 바뀝니다. 위쪽 홈은 턱뼈 단면을 감싸는 부분이라 사진으로 잴 수 없어 <b>원본 설계</b>를 씁니다.</p>
 </div>
 <script>
   // 두 폼에 결합부 치수 입력(숨김)을 넣어 함께 전송 — 값은 서버 _MOUNT_SPEC 기준
@@ -3546,7 +3554,8 @@ async def head_build_json(front: UploadFile = File(...), left: UploadFile = File
         return {"ok": True, "views_used": used,
                 "measurements": {k: cad[k] for k in keys},
                 "notches": [{k: n[k] for k in ("id", "label", "chord", "face_radius", "orig_radius", "radius",
-                                                "orig_depth", "depth", "min_band", "limited")} for n in cad["notches"]],
+                                                "orig_depth", "depth", "min_band", "limited", "fixed")}
+                            for n in cad["notches"]],
                 "dxf_base64": base64.b64encode(dxf.encode("utf-8")).decode("ascii")}
     except Exception as e:
         print("헤드 빌드(JSON) 실패:", e)
