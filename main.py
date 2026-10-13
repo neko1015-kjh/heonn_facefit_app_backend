@@ -3240,13 +3240,25 @@ def _render_plate_page(cad, dxf_href):
   .lg {{ display:flex; gap:14px; justify-content:center; flex-wrap:wrap; font-size:12px; color:#a1a1aa; margin-top:8px; }}
   .lg i {{ width:18px; height:0; border-top:3px solid; display:inline-block; vertical-align:middle; margin-right:5px; }}
   a {{ color:#fcd34d; }}
+  .tabs {{ display:flex; gap:6px; margin-bottom:10px; }}
+  .tb {{ flex:1; background:#0d0d10; color:#a1a1aa; border:1px solid #3f3f46; border-radius:10px; padding:8px; font-size:13px; cursor:pointer; }}
+  .tb.on {{ background:#f59e0b; color:#09090b; border-color:#f59e0b; font-weight:700; }}
 </style></head><body>
-<h1>HeOnn 맞춤 유기판 도면 (평면도)</h1>
+<h1>HeOnn 맞춤 유기판 도면</h1>
 <div class="sub">헤온 바디에 그대로 조립 — 얼굴에 닿는 왼쪽 긴 오목면을 이 얼굴 턱선에 맞춤</div>
 <div class="src">📐 측정 소스: {src} · 기준 원본: {cad.get('plate_name', '')}</div>
 <div class="card">
-  {heonn_plate.plate_svg(cad)}
-  <div class="lg"><span><i style="border-color:#fbbf24"></i>맞춤으로 바뀐 구간</span><span><i style="border-color:#d97706"></i>유기판 외곽</span><span><i style="border-color:#71717a;border-top-style:dashed"></i>원본 바깥선</span></div>
+  <div class="tabs"><button class="tb on" data-t="t3d">🧊 3D 보기</button><button class="tb" data-t="t2d">📐 평면도</button></div>
+  <div id="t3d">{heonn_plate.plate_viewer_html(cad, cad['thickness'])}</div>
+  <div id="t2d" style="display:none">{heonn_plate.plate_svg(cad)}
+  <div class="lg"><span><i style="border-color:#fbbf24"></i>맞춤으로 바뀐 구간</span><span><i style="border-color:#d97706"></i>유기판 외곽</span><span><i style="border-color:#71717a;border-top-style:dashed"></i>원본 바깥선</span></div></div>
+  <script>
+    document.querySelectorAll('.tb').forEach(function(b){{ b.onclick=function(){{
+      document.querySelectorAll('.tb').forEach(function(x){{ x.classList.toggle('on', x===b); }});
+      document.getElementById('t3d').style.display = b.dataset.t==='t3d' ? '' : 'none';
+      document.getElementById('t2d').style.display = b.dataset.t==='t2d' ? '' : 'none';
+    }}; }});
+  </script>
   <table>
     {rows}
     <tr><td class="k" style="padding-top:14px">바디 조립부 (안쪽 선 · 나사 구멍 {len(holes)}개 ⌀{holes[0]['d'] if holes else '-'})</td><td class="v" style="padding-top:14px">원본 그대로</td></tr>

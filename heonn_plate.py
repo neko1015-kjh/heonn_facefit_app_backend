@@ -357,3 +357,113 @@ def plate_svg(cad, W=420, H=480, pad=24):
         parts.append(f'<circle cx="{X(h["x"]):.1f}" cy="{Y(h["y"]):.1f}" r="{max(2.5, h["d"] / 2 * s):.1f}" '
                      f'fill="#09090b" stroke="#a1a1aa" stroke-width="1.3"/>')
     return (f'<svg width="100%" viewBox="0 0 {W} {H}" style="max-width:{W}px">' + "".join(parts) + "</svg>")
+
+
+def plate_viewer_html(cad, thickness=2.0):
+    """맞춤 유기판 3D 보기(외부 라이브러리 없이 canvas로 직접 그림).
+    평면 외곽을 판 두께만큼 세운 입체 — 드래그로 회전, 휠·두 손가락으로 확대, 맞춤 구간은 금색으로 강조."""
+    outline = _closed_outline(cad["outer"], cad["inner"])
+    n_out = len(cad["outer"])
+    # 1mm 간격으로 줄여 가볍게(바깥선 구간 표시는 원래 인덱스 기준으로 함께 표시)
+    keep = list(range(0, len(outline), 2))
+    pts = [[round(outline[k][0], 2), round(outline[k][1], 2)] for k in keep]
+    zone = []
+    for n in cad["notches"]:
+        if not n.get("fixed"):
+            zone.append([j for j, k in enumerate(keep) if n["i0"] <= k <= n["i1"] and k < n_out])
+    orig = [[round(p[0], 2), round(p[1], 2)] for p in cad["orig_outer"][::2]]
+    holes = [[h["x"], h["y"], h["d"] / 2] for h in cad["holes"]]
+    data = json.dumps({"pts": pts, "zone": [[z[0], z[-1]] for z in zone if z], "orig": orig,
+                       "holes": holes, "t": thickness})
+    return """
+<div class="v3d">
+  <canvas id="v3d" width="420" height="380" style="width:100%;max-width:420px;touch-action:none;cursor:grab"></canvas>
+  <div class="v3b">
+    <button data-v="top">위에서</button><button data-v="iso">비스듬히</button><button data-v="side">옆에서</button>
+    <button id="v3t">두께 강조 끄기</button><button id="v3o">원본선 숨기기</button>
+  </div>
+  <div class="v3h">드래그 = 회전 · 휠/두 손가락 = 확대 · 금색 면 = 이 얼굴에 맞춰 바뀐 구간</div>
+</div>
+<style>
+  .v3d { margin-top:14px; } .v3d canvas { display:block; margin:0 auto; background:#0d0d10; border-radius:12px; }
+  .v3b { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-top:8px; }
+  .v3b button { background:#27272a; color:#e4e4e7; border:1px solid #3f3f46; border-radius:999px; padding:6px 11px; font-size:12px; cursor:pointer; }
+  .v3h { color:#71717a; font-size:11.5px; text-align:center; margin-top:6px; }
+</style>
+<script>
+(function(){
+  var D = __DATA__;
+  var cv = document.getElementById('v3d'), ctx = cv.getContext('2d');
+  var W = cv.width, H = cv.height;
+  var P = D.pts, N = P.length;
+  // 중심·크기
+  var mnx=1e9,mny=1e9,mxx=-1e9,mxy=-1e9;
+  P.forEach(function(p){ mnx=Math.min(mnx,p[0]); mny=Math.min(mny,p[1]); mxx=Math.max(mxx,p[0]); mxy=Math.max(mxy,p[1]); });
+  var cx=(mnx+mxx)/2, cy=(mny+mxy)/2, span=Math.max(mxx-mnx,mxy-mny);
+  // 다각형 방향(바깥 법선 계산용)
+  var A=0; for (var i=0;i<N;i++){ var a=P[i], b=P[(i+1)%N]; A+=a[0]*b[1]-b[0]*a[1]; } var ccw = A>0;
+  var inZone = new Array(N).fill(false);
+  D.zone.forEach(function(z){ for (var k=z[0]; k<z[1]; k++) inZone[k]=true; });
+  var yaw=-0.5, pitch=0.95, zoom=1, exag=4, showOrig=true, auto=true;
+  var L = norm([0.4,-0.5,0.8]);
+  function norm(v){ var l=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/l,v[1]/l,v[2]/l]; }
+  function rot(x,y,z){ // Z축(yaw) → X축(pitch) 회전
+    var c=Math.cos(yaw), s=Math.sin(yaw); var x1=x*c-y*s, y1=x*s+y*c;
+    var cp=Math.cos(pitch), sp=Math.sin(pitch); return [x1, y1*cp-z*sp, y1*sp+z*cp];
+  }
+  function proj(r){ var sc=(W*0.78/span)*zoom, f=900/(900-r[2]*sc*0.6); return [W/2+r[0]*sc*f, H/2-r[1]*sc*f]; }
+  function shade(rgb, n){ var k=0.32+0.68*Math.max(0,n[0]*L[0]+n[1]*L[1]+n[2]*L[2]); return 'rgb('+[0,1,2].map(function(i){return Math.round(rgb[i]*k);}).join(',')+')'; }
+  var BRASS=[200,160,80], GOLD=[255,150,30], TOP=[222,180,96];
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    var T = D.t*exag, zt=T/2, zb=-T/2;
+    var top = P.map(function(p){ return proj(rot(p[0]-cx,p[1]-cy,zt)); });
+    var bot = P.map(function(p){ return proj(rot(p[0]-cx,p[1]-cy,zb)); });
+    var capN = rot(0,0,1), seeTop = capN[2] > 0;
+    // 옆면: 보이는 면만 깊이순(먼 것부터)
+    var walls=[];
+    for (var i=0;i<N;i++){
+      var a=P[i], b=P[(i+1)%N], dx=b[0]-a[0], dy=b[1]-a[1], l=Math.hypot(dx,dy)||1;
+      var n = ccw ? [dy/l,-dx/l,0] : [-dy/l,dx/l,0];
+      var rn = rot(n[0],n[1],0); if (rn[2] <= 0) continue;
+      var m = rot((a[0]+b[0])/2-cx,(a[1]+b[1])/2-cy,0);
+      walls.push({i:i, d:m[2], n:rn});
+    }
+    walls.sort(function(p,q){ return p.d-q.d; });
+    walls.forEach(function(w){
+      var i=w.i, j=(i+1)%N; ctx.beginPath();
+      ctx.moveTo(top[i][0],top[i][1]); ctx.lineTo(top[j][0],top[j][1]); ctx.lineTo(bot[j][0],bot[j][1]); ctx.lineTo(bot[i][0],bot[i][1]); ctx.closePath();
+      var col = shade(inZone[i]?GOLD:BRASS, w.n); ctx.fillStyle=col; ctx.strokeStyle=col; ctx.lineWidth=0.6; ctx.fill(); ctx.stroke();
+    });
+    // 보이는 덮개면(위 또는 아래) + 나사 구멍
+    var cap = seeTop ? top : bot, z = seeTop ? zt : zb, cn = seeTop ? capN : rot(0,0,-1);
+    ctx.beginPath(); cap.forEach(function(p,k){ k?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); }); ctx.closePath();
+    D.holes.forEach(function(h){ for (var k=0;k<=24;k++){ var t=-k/24*Math.PI*2, q=proj(rot(h[0]+h[2]*Math.cos(t)-cx,h[1]+h[2]*Math.sin(t)-cy,z)); k?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); } ctx.closePath(); });
+    ctx.fillStyle = shade(TOP, cn); ctx.fill('evenodd');
+    // 맞춤 구간 테두리 강조
+    ctx.lineWidth=4.5; ctx.strokeStyle='#ff9f1c';
+    D.zone.forEach(function(zz){ ctx.beginPath(); for (var k=zz[0]; k<=zz[1]; k++){ var p=cap[k]; k>zz[0]?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); } ctx.stroke(); });
+    // 원본 바깥선(점선) — 바뀐 정도 비교용
+    if (showOrig){ ctx.setLineDash([4,3]); ctx.lineWidth=1.2; ctx.strokeStyle='rgba(250,250,250,0.55)'; ctx.beginPath();
+      D.orig.forEach(function(p,k){ var q=proj(rot(p[0]-cx,p[1]-cy,z)); k?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }); ctx.stroke(); ctx.setLineDash([]); }
+  }
+  // 조작: 드래그 회전, 휠·핀치 확대
+  var ptrs={}, last=null, pinch0=null;
+  cv.addEventListener('pointerdown', function(e){ auto=false; cv.setPointerCapture(e.pointerId); ptrs[e.pointerId]=[e.clientX,e.clientY]; last=[e.clientX,e.clientY]; cv.style.cursor='grabbing'; });
+  cv.addEventListener('pointermove', function(e){
+    if (!(e.pointerId in ptrs)) return; ptrs[e.pointerId]=[e.clientX,e.clientY];
+    var ids=Object.keys(ptrs);
+    if (ids.length===2){ var a=ptrs[ids[0]], b=ptrs[ids[1]], d=Math.hypot(a[0]-b[0],a[1]-b[1]); if (pinch0) zoom=Math.max(0.5,Math.min(5,zoom*d/pinch0)); pinch0=d; draw(); return; }
+    yaw += (e.clientX-last[0])*0.01; pitch = Math.max(-1.5,Math.min(1.5,pitch+(e.clientY-last[1])*0.01)); last=[e.clientX,e.clientY]; draw();
+  });
+  function up(e){ delete ptrs[e.pointerId]; pinch0=null; cv.style.cursor='grab'; }
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', function(e){ e.preventDefault(); auto=false; zoom=Math.max(0.5,Math.min(5,zoom*(e.deltaY<0?1.1:0.9))); draw(); }, {passive:false});
+  document.querySelectorAll('.v3b button[data-v]').forEach(function(b){ b.onclick=function(){ auto=false; var v=b.dataset.v;
+    if (v==='top'){ yaw=0; pitch=0; } else if (v==='iso'){ yaw=-0.5; pitch=0.95; } else { yaw=0; pitch=1.45; } zoom=1; draw(); }; });
+  document.getElementById('v3t').onclick=function(){ exag = exag===1?4:1; this.textContent = exag===1?'두께 강조 켜기':'두께 강조 끄기'; draw(); };
+  document.getElementById('v3o').onclick=function(){ showOrig=!showOrig; this.textContent = showOrig?'원본선 숨기기':'원본선 보이기'; draw(); };
+  (function spin(){ if (auto){ yaw += 0.006; draw(); requestAnimationFrame(spin); } })();
+  draw();
+})();
+</script>""".replace("__DATA__", data)
