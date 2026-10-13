@@ -24,7 +24,7 @@ MIN_HOLE_EDGE_MM = 5.5
 # 오목면 최소 깊이(mm) — 얼굴이 아주 평평해도 홈 모양은 남깁니다
 MIN_SAGITTA_MM = 0.5
 # 얼굴에 맞춰 바꾸는 오목면. 위쪽 홈(chin)은 턱뼈 '단면'을 감싸는 홈이라 정면 윤곽(사진·스캔 실루엣)으로는
-# 잴 수 없어 원본(R≈30, 디자이너 설계)을 그대로 둡니다. 단면 측정이 생기면 여기에 "chin"을 추가하세요.
+# 잴 수 없어 원본(R≈30, 디자이너 설계)을 그대로 둡니다. 단, 3D 스캔이면 턱끝 세로 단면을 재서 맞춥니다(chin_sec).
 CUSTOM_NOTCHES = ("cheek",)
 # 바뀐 구간 양 끝을 부드럽게 잇는 비율(구간 길이의 앞뒤 20%)
 _BLEND = 0.2
@@ -182,6 +182,45 @@ def face_radius(jaw, chin_idx, notch_id, chord):
     return sum(rs) / len(rs) if rs else None
 
 
+def chin_section(points_yz, chin_yz):
+    """3D 스캔의 턱끝 세로 단면(얼굴 가운데를 앞뒤로 자른 면)에서 '턱 아래→턱끝 앞' 바깥 윤곽을 뽑습니다.
+    points_yz: 가운데 얇은 판(좌우 ±몇 mm) 안의 점들 (y=위, z=앞, mm) / chin_yz: 턱끝(가장 아래) 점.
+    턱끝 위·뒤쪽 25mm 지점을 중심으로 각도별 가장 먼 점을 이어 윤곽을 만듭니다. 실패 시 None."""
+    if not points_yz or chin_yz is None:
+        return None
+    oy, oz = chin_yz[0] + 25.0, chin_yz[1] - 25.0
+    bins = {}
+    for (y, z) in points_yz:
+        dy, dz = y - oy, z - oz
+        ang = math.degrees(math.atan2(dy, dz))      # 0° = 앞, -90° = 아래
+        if -170 <= ang <= 10:
+            r = math.hypot(dy, dz)
+            k = int(round(ang / 1.5))
+            if k not in bins or r > bins[k][0]:
+                bins[k] = (r, (y, z))
+    if len(bins) < 20:
+        return None
+    return [bins[k][1] for k in sorted(bins, reverse=True)]   # 앞(턱끝 앞면) → 아래 → 뒤(턱 밑)
+
+
+def section_radius(section, chord):
+    """턱끝 단면에서 '앞-아래 45°' 방향의 가장 튀어나온 곳을 가운데 두고, 폭 chord 구간의 곡률 반지름."""
+    if not section or len(section) < 5:
+        return None
+    # 가장 앞-아래(45°)로 나온 점 = 위쪽 홈이 걸리는 턱끝 모서리
+    mid = max(range(len(section)), key=lambda k: -section[k][0] + section[k][1])
+    fine = _resample(section, 0.5)
+    ci = min(range(len(fine)), key=lambda k: _dist(fine[k], section[mid]))
+    for half in range(1, len(fine)):
+        a, b = ci - half, ci + half
+        if a < 0 or b >= len(fine):
+            return None
+        if _dist(fine[a], fine[b]) >= chord:
+            c, s, _ = _chord_sagitta(fine[a:b + 1])
+            return _radius_from(c, s)
+    return None
+
+
 # ── 유기판 맞춤 설계 ─────────────────────────────────────────
 
 def _reshape_notch(outer, i0, i1, s_target):
@@ -208,8 +247,9 @@ def _safe(seg_new, inner, holes):
     return w, (w >= MIN_BAND_MM and h >= MIN_HOLE_EDGE_MM)
 
 
-def design_plate(jaw, chin_idx, plate, source="정면 사진", ipd_mm=63.0):
-    """턱선(mm 2D) + 헤온 유기판 원본 → 맞춤 유기판 설계(cad dict). 실패 시 None."""
+def design_plate(jaw, chin_idx, plate, source="정면 사진", ipd_mm=63.0, chin_sec=None):
+    """턱선(mm 2D) + 헤온 유기판 원본 → 맞춤 유기판 설계(cad dict). 실패 시 None.
+    chin_sec: 3D 스캔에서 뽑은 턱끝 세로 단면(chin_section 결과). 있으면 위쪽 홈도 그 곡률에 맞춥니다."""
     if not plate or not jaw or chin_idx is None:
         return None
     outer = [tuple(p) for p in plate["outer"]]
@@ -223,7 +263,8 @@ def design_plate(jaw, chin_idx, plate, source="정면 사진", ipd_mm=63.0):
         c, s0, _ = _chord_sagitta(seg)
         s0 = abs(s0)
         R0 = _radius_from(c, s0)
-        if nt["id"] not in CUSTOM_NOTCHES:
+        use_sec = nt["id"] == "chin" and chin_sec is not None
+        if nt["id"] not in CUSTOM_NOTCHES and not use_sec:
             # 원본 유지 구간 — 측정값 없이 원래 모양 그대로
             notches.append({
                 "id": nt["id"], "label": nt["label"], "i0": i0, "i1": i1, "chord": round(c, 1),
@@ -233,7 +274,7 @@ def design_plate(jaw, chin_idx, plate, source="정면 사진", ipd_mm=63.0):
                 "limited": False, "fixed": True,
             })
             continue
-        Rf = face_radius(jaw, chin_idx, nt["id"], c)
+        Rf = section_radius(chin_sec, c) if use_sec else face_radius(jaw, chin_idx, nt["id"], c)
         if Rf is None:
             return None
         # 1:1 밀착 — 판 홈 반지름 = 얼굴 곡률 반지름
@@ -326,6 +367,12 @@ def plate_to_dxf(cad):
             msg = (f"{n['id']}: chord={n['chord']} depth {n['orig_depth']}->{n['depth']} R {n['orig_radius']}->{n['radius']}"
                    f" (face R={n['face_radius']}) minBand={n['min_band']}{' LIMITED' if n['limited'] else ''}")
         text(x0, y0 - 7 - 6 * k, 3.0, msg)
+    # 디자이너 안내: 이 도면은 가운데 높이의 평면 외곽선 — 바뀐 구간은 3D 바디 표면도 함께 다시 만들어야 함
+    ny = y0 - 7 - 6 * len(cad["notches"])
+    text(x0, ny, 3.0, "NOTE: plan outline at body mid-height (z=0). Outer face surface is the body's rounded section"
+                      " (~22mm tall, R10-25) - NOT a flat plate edge.")
+    text(x0, ny - 6, 3.0, "In CUSTOM_ZONE, re-loft the body/brass outer surface to follow the new outline,"
+                          " keeping the original section shape. Elsewhere keep original 3D model.")
     body = "".join(ent)
     return "0\nSECTION\n2\nENTITIES\n" + body + "0\nENDSEC\n0\nEOF\n"
 

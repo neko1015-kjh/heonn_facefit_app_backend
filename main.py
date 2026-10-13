@@ -2837,14 +2837,14 @@ def _head_from_jaw2d(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진",
 _PLATE_MISSING_MSG = "헤온 유기판 원본 데이터가 서버에 설정되지 않았어요(HEONN_PLATE). 관리자에게 문의해주세요."
 
 
-def _design_cad(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진", **mount):
+def _design_cad(jaw, chin_idx, head_mm, ipd_mm, source="정면 사진", chin_sec=None, **mount):
     """턱선 → 헤온 유기판 맞춤 설계. 바디에 조립되는 안쪽 선·나사 구멍은 원본 그대로,
     얼굴에 닿는 오목면 두 곳만 얼굴 곡률에 맞춥니다. 원본 데이터가 없으면 None.
     (head_mm·mount 값은 예전 범용 헤드용 — 헤온 판에서는 원본 치수를 쓰므로 사용하지 않음)"""
     plate = heonn_plate.load_plate()
     if plate is None:
         return None
-    return heonn_plate.design_plate(jaw, chin_idx, plate, source=source, ipd_mm=ipd_mm)
+    return heonn_plate.design_plate(jaw, chin_idx, plate, source=source, ipd_mm=ipd_mm, chin_sec=chin_sec)
 
 
 def _jaw_cad(raw, head_mm=75.0, ipd_mm=63.0, **mount):
@@ -3106,25 +3106,51 @@ def _orient_face_points(a):
     return a @ R.T                      # 새 좌표(x=좌우, y=위, z=앞)
 
 
+def _oriented_mesh_mm(verts, flip_lr=False, flip_ud=False, flip_fb=False):
+    """3D 스캔 정점 → mm 단위·표준 자세(X=좌우·Y=위·Z=앞) 배열. 점이 너무 적으면 None."""
+    if len(verts) < 100:
+        return None
+    a = np.array(verts, dtype=float)
+    ext = a.max(0) - a.min(0)
+    if float(max(ext)) < 5:      # 미터 단위로 보이면 mm로 변환
+        a *= 1000.0
+    a -= a.mean(0)
+    a = _orient_face_points(a)   # 임의 방향 스캔 자동 정렬(X=좌우·Y=위·Z=앞)
+    # 자동 정렬이 방향을 반대로 잡은 경우(드묾) 사용자가 체크한 축을 뒤집어 보정
+    if flip_lr:
+        a[:, 0] *= -1.0
+    if flip_ud:
+        a[:, 1] *= -1.0
+    if flip_fb:
+        a[:, 2] *= -1.0
+    return a
+
+
+def _chin_sec_from_mesh(verts, chin_x, flip_lr=False, flip_ud=False, flip_fb=False):
+    """3D 스캔 → 턱끝 세로 단면(얼굴 가운데 앞뒤 단면의 '턱 밑→턱끝 앞' 윤곽). 위쪽 홈 맞춤용. 실패 시 None.
+    chin_x: 턱선에서 찾은 턱끝의 좌우 위치(mm) — 그 위치 ±2.5mm 얇은 판의 점만 씁니다."""
+    try:
+        a = _oriented_mesh_mm(verts, flip_lr, flip_ud, flip_fb)
+        if a is None:
+            return None
+        sl = a[np.abs(a[:, 0] - chin_x) < 2.5]
+        if len(sl) < 30:
+            return None
+        k = int(sl[:, 1].argmin())   # 단면에서 가장 아래 = 턱끝
+        return heonn_plate.chin_section([(float(p[1]), float(p[2])) for p in sl],
+                                        (float(sl[k, 1]), float(sl[k, 2])))
+    except Exception as e:
+        print("턱끝 단면 추출 실패:", e)
+        return None
+
+
 def _jaw2d_from_mesh(verts, flip_lr=False, flip_ud=False, flip_fb=False):
     """3D 스캔 정점(mm 가정, Y 위·Z 앞) → 앞쪽 하단 실루엣(턱선) 2D + 턱끝 인덱스. 실패 시 None.
     flip_lr/ud/fb: 자동 정렬 결과가 뒤집혔을 때 수동 보정(좌우/위아래/앞뒤 뒤집기)."""
     try:
-        if len(verts) < 100:
+        a = _oriented_mesh_mm(verts, flip_lr, flip_ud, flip_fb)
+        if a is None:
             return None
-        a = np.array(verts, dtype=float)
-        ext = a.max(0) - a.min(0)
-        if float(max(ext)) < 5:      # 미터 단위로 보이면 mm로 변환
-            a *= 1000.0
-        a -= a.mean(0)
-        a = _orient_face_points(a)   # 임의 방향 스캔 자동 정렬(X=좌우·Y=위·Z=앞)
-        # 자동 정렬이 방향을 반대로 잡은 경우(드묾) 사용자가 체크한 축을 뒤집어 보정
-        if flip_lr:
-            a[:, 0] *= -1.0
-        if flip_ud:
-            a[:, 1] *= -1.0
-        if flip_fb:
-            a[:, 2] *= -1.0
         x, y, z = a[:, 0], a[:, 1], a[:, 2]
         zmid = np.median(z)
         front = a[z >= zmid]         # 얼굴 앞쪽 절반(코 방향)
@@ -3209,8 +3235,8 @@ def _render_plate_page(cad, dxf_href):
                      f' <span style="color:#a1a1aa">· 원본 유지</span></td></tr>'
                      f'<tr><td class="k">홈 반경 · 깊이 · 폭 (디자이너 원본)</td><td class="v">R {n["radius"]} · '
                      f'{n["depth"]} · {n["chord"]} mm</td></tr>'
-                     f'<tr><td class="k" colspan="2" style="font-size:11.5px">턱뼈 단면을 감싸는 홈이라 정면 윤곽으로는 '
-                     f'잴 수 없어 원본 설계를 그대로 씁니다.</td></tr>')
+                     f'<tr><td class="k" colspan="2" style="font-size:11.5px">턱뼈 단면을 감싸는 홈이라 정면 사진으로는 '
+                     f'잴 수 없어 원본 설계를 그대로 씁니다. (3D 스캔 파일로 만들면 턱끝 단면을 재서 맞춰요)</td></tr>')
             continue
         lim = ' <span style="color:#f87171">· 안전 한도 적용</span>' if n["limited"] else ""
         rows += (f'<tr><td class="k" colspan="2" style="color:#fcd34d;padding-top:14px">{n["label"]}{lim}</td></tr>'
@@ -3266,11 +3292,17 @@ def _render_plate_page(cad, dxf_href):
     <tr><td class="k">얼굴 닿는 바깥 표면</td><td class="v">원본 CAD 둥근 단면 그대로 (직각 모서리 없음)</td></tr>
   </table>
   <a class="dl" href="{dxf_href}" download="heonn_plate.dxf">📐 맞춤 유기판 도면(DXF) 내려받기</a>
+  <div class="use" style="border-color:#92400e">
+    <b>🛠 디자이너·가공 전달 사항</b><br/>
+    · 이 도면은 바디 <b>가운데 높이의 평면 외곽선</b>입니다. 실제 얼굴에 닿는 면은 높이 약 22mm의 <b>둥근 바디 표면</b>(단면 R10~25mm)이에요.<br/>
+    · <b>주황(맞춤) 구간</b>은 원본 3D 모델에서 바깥 표면을 <b>새 외곽선을 따라 다시 만들어야</b> 합니다(원본 단면 모양 유지). 평면 외곽만 바꾸면 판이 바디 밖으로 튀어나오거나 안으로 들어가요.<br/>
+    · 그 외 구간·안쪽 선·나사 구멍은 <b>원본 3D 모델 그대로</b> 사용합니다.
+  </div>
   <div class="use">
-    <b>위쪽 홈</b> — 턱끝 중앙에 홈을 대고 <b>턱선을 따라 귀 쪽으로</b> 쓸어 올립니다. 턱뼈 모서리를 감싸도록 디자이너가 설계한 원본 홈입니다.<br/>
+    <b>위쪽 홈</b> — 턱끝 중앙에 홈을 대고 <b>턱선을 따라 귀 쪽으로</b> 쓸어 올립니다. 턱끝 모서리를 감싸는 홈입니다(3D 스캔이면 이 얼굴 턱끝 단면에 맞춤, 사진이면 원본).<br/>
     <b>왼쪽 긴 면</b> — 턱끝→귀 방향 턱선·볼을 길게 쓸어내리는 면으로, 턱선 곡률에 맞췄습니다. 피부에 <b>약 15~45°</b>로 눕혀 사용.
   </div>
-  <div class="note">※ 좌표는 디자이너 원본 CAD(Final-M-08)와 같은 위치(mm)라 원본 위에 그대로 겹쳐 쓸 수 있어요. DXF 레이어: PLATE_OUTLINE(가공 외곽) · CUSTOM_ZONE(바뀐 구간) · ORIGINAL_EDGE(원본 바깥선) · HOLES(나사 구멍). 모서리 라운드 등 입체 형상은 원본 3D 모델에서 이 외곽으로 다시 적용해 주세요.
+  <div class="note">※ 좌표는 디자이너 원본 CAD(Final-M-08)와 같은 위치(mm)라 원본 위에 그대로 겹쳐 쓸 수 있어요. DXF 레이어: PLATE_OUTLINE(가공 외곽) · CUSTOM_ZONE(바뀐 구간) · ORIGINAL_EDGE(원본 바깥선) · HOLES(나사 구멍) · NOTE(전달 사항).
   안전 한도: 최소 띠 폭 {heonn_plate.MIN_BAND_MM}mm · 나사 구멍~테두리 {heonn_plate.MIN_HOLE_EDGE_MM}mm (넘으면 깊이를 자동으로 줄임). 사진은 눈 사이 {cad['ipd_mm']}mm 기준 환산이라 3D 스캔이 더 정확합니다. <a href="/head/build">▶ 다른 사진/3D 파일로 만들기</a></div>
 </div>
 </body></html>"""
@@ -3471,7 +3503,7 @@ def head_build_form():
 
 <div class="card" style="opacity:.9">
   <h2>헤온 바디 기준 <span class="tag">원본 CAD(Final-M-08) 적용</span></h2>
-  <p>도면은 헤온 바디에 나사 4개로 고정되는 <b>방짜유기 판 원본</b>을 기준으로 만들어요. 바디에 닿는 안쪽 선·나사 구멍은 <b>원본 그대로</b>라 그대로 조립되고, 얼굴에 닿는 <b>왼쪽 긴 오목면</b>이 이 얼굴 턱선 곡률에 맞춰 바뀝니다. 위쪽 홈은 턱뼈 단면을 감싸는 부분이라 사진으로 잴 수 없어 <b>원본 설계</b>를 씁니다.</p>
+  <p>도면은 헤온 바디에 나사 4개로 고정되는 <b>방짜유기 판 원본</b>을 기준으로 만들어요. 바디에 닿는 안쪽 선·나사 구멍은 <b>원본 그대로</b>라 그대로 조립되고, 얼굴에 닿는 <b>왼쪽 긴 오목면</b>이 이 얼굴 턱선 곡률에 맞춰 바뀝니다. 위쪽 홈은 턱끝 단면을 감싸는 부분이라 <b>3D 스캔 파일</b>일 때만 맞추고, 사진이면 <b>원본 설계</b>를 씁니다.</p>
 </div>
 <script>
   // 두 폼에 결합부 치수 입력(숨김)을 넣어 함께 전송 — 값은 서버 _MOUNT_SPEC 기준
@@ -3520,7 +3552,9 @@ async def head_build(mesh: UploadFile = File(None), front: UploadFile = File(Non
             jaw, chin = jr
             flips = "·".join(t for t, on in (("좌우", flip_lr), ("상하", flip_ud), ("앞뒤", flip_fb)) if on)
             src = f"3D 스캔 파일({mesh.filename})" + (f" · 수동 뒤집기({flips})" if flips else "")
-            cad = _design_cad(jaw, chin, head_mm, ipd_mm, source=src, **mk)
+            # 3D 스캔은 옆모습이 있어 턱끝 세로 단면도 잴 수 있음 → 위쪽 홈까지 맞춤
+            sec = _chin_sec_from_mesh(verts, jaw[chin][0], flip_lr=bool(flip_lr), flip_ud=bool(flip_ud), flip_fb=bool(flip_fb))
+            cad = _design_cad(jaw, chin, head_mm, ipd_mm, source=src, chin_sec=sec, **mk)
         elif front is not None and getattr(front, "filename", ""):
             f = await front.read()
             lf = await left.read() if (left and getattr(left, "filename", "")) else None
