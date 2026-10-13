@@ -326,6 +326,12 @@ def plate_to_dxf(cad):
             msg = (f"{n['id']}: chord={n['chord']} depth {n['orig_depth']}->{n['depth']} R {n['orig_radius']}->{n['radius']}"
                    f" (face R={n['face_radius']}) minBand={n['min_band']}{' LIMITED' if n['limited'] else ''}")
         text(x0, y0 - 7 - 6 * k, 3.0, msg)
+    # 디자이너 안내: 이 도면은 가운데 높이의 평면 외곽선 — 바뀐 구간은 3D 바디 표면도 함께 다시 만들어야 함
+    ny = y0 - 7 - 6 * len(cad["notches"])
+    text(x0, ny, 3.0, "NOTE: plan outline at body mid-height (z=0). Outer face surface is the body's rounded section"
+                      " (~22mm tall, R10-25) - NOT a flat plate edge.")
+    text(x0, ny - 6, 3.0, "In CUSTOM_ZONE, re-loft the body/brass outer surface to follow the new outline,"
+                          " keeping the original section shape. Elsewhere keep original 3D model.")
     body = "".join(ent)
     return "0\nSECTION\n2\nENTITIES\n" + body + "0\nENDSEC\n0\nEOF\n"
 

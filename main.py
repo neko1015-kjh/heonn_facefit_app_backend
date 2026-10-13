@@ -3266,11 +3266,17 @@ def _render_plate_page(cad, dxf_href):
     <tr><td class="k">얼굴 닿는 바깥 표면</td><td class="v">원본 CAD 둥근 단면 그대로 (직각 모서리 없음)</td></tr>
   </table>
   <a class="dl" href="{dxf_href}" download="heonn_plate.dxf">📐 맞춤 유기판 도면(DXF) 내려받기</a>
+  <div class="use" style="border-color:#92400e">
+    <b>🛠 디자이너·가공 전달 사항</b><br/>
+    · 이 도면은 바디 <b>가운데 높이의 평면 외곽선</b>입니다. 실제 얼굴에 닿는 면은 높이 약 22mm의 <b>둥근 바디 표면</b>(단면 R10~25mm)이에요.<br/>
+    · <b>주황(맞춤) 구간</b>은 원본 3D 모델에서 바깥 표면을 <b>새 외곽선을 따라 다시 만들어야</b> 합니다(원본 단면 모양 유지). 평면 외곽만 바꾸면 판이 바디 밖으로 튀어나오거나 안으로 들어가요.<br/>
+    · 그 외 구간·안쪽 선·나사 구멍은 <b>원본 3D 모델 그대로</b> 사용합니다.
+  </div>
   <div class="use">
     <b>위쪽 홈</b> — 턱끝 중앙에 홈을 대고 <b>턱선을 따라 귀 쪽으로</b> 쓸어 올립니다. 턱뼈 모서리를 감싸도록 디자이너가 설계한 원본 홈입니다.<br/>
     <b>왼쪽 긴 면</b> — 턱끝→귀 방향 턱선·볼을 길게 쓸어내리는 면으로, 턱선 곡률에 맞췄습니다. 피부에 <b>약 15~45°</b>로 눕혀 사용.
   </div>
-  <div class="note">※ 좌표는 디자이너 원본 CAD(Final-M-08)와 같은 위치(mm)라 원본 위에 그대로 겹쳐 쓸 수 있어요. DXF 레이어: PLATE_OUTLINE(가공 외곽) · CUSTOM_ZONE(바뀐 구간) · ORIGINAL_EDGE(원본 바깥선) · HOLES(나사 구멍). 모서리 라운드 등 입체 형상은 원본 3D 모델에서 이 외곽으로 다시 적용해 주세요.
+  <div class="note">※ 좌표는 디자이너 원본 CAD(Final-M-08)와 같은 위치(mm)라 원본 위에 그대로 겹쳐 쓸 수 있어요. DXF 레이어: PLATE_OUTLINE(가공 외곽) · CUSTOM_ZONE(바뀐 구간) · ORIGINAL_EDGE(원본 바깥선) · HOLES(나사 구멍) · NOTE(전달 사항).
   안전 한도: 최소 띠 폭 {heonn_plate.MIN_BAND_MM}mm · 나사 구멍~테두리 {heonn_plate.MIN_HOLE_EDGE_MM}mm (넘으면 깊이를 자동으로 줄임). 사진은 눈 사이 {cad['ipd_mm']}mm 기준 환산이라 3D 스캔이 더 정확합니다. <a href="/head/build">▶ 다른 사진/3D 파일로 만들기</a></div>
 </div>
 </body></html>"""
