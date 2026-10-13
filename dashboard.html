@@ -888,7 +888,7 @@
       <div class="road-item done"><span class="ck">✅</span><span class="t"><b>1. 프로젝트 복제</b> <span class="sub">정식 앱 복제 + 새 정체성 반영 + 새 GitHub 저장소 생성·푸시 + 의존성 설치·타입검사 통과</span></span></div>
       <div class="road-item done"><span class="ck">✅</span><span class="t"><b>2. 기능 덜어내기</b> <span class="sub">기기 연결(페어링·셋팅)·맞춤 헤드 CAD 제거 + 흐름 단순화(로그인→바로 분석). 파일 삭제·타입검사 통과</span></span></div>
       <div class="road-item done"><span class="ck">✅</span><span class="t"><b>3. 백엔드 연결 정리</b> <span class="sub">공용 백엔드 유지 + <b>앱 구분 태그 적용</b> — Lite는 X-App-Source:lite 헤더 전송, 백엔드가 scans.app_source에 기록(정식='full')</span></span></div>
-      <div class="road-item"><span class="ck">📋</span><span class="t"><b>4. 디자인·브랜딩</b> <span class="sub">아이콘·스플래시·첫 화면 문구 Lite용 정리</span></span></div>
+      <div class="road-item"><span class="ck">🔄</span><span class="t"><b>4. 디자인·브랜딩</b> <span class="sub">1차(07-23) 앱 전체 문구 Lite 정체성으로 교체 ✅ · 2차(07-23) 구분 아이콘 — 아이콘·스플래시에 에메랄드 'LITE' 배지, 안드로이드 아이콘 배경 에메랄드 ✅ · 전용 디자인 나오면 아이콘 교체 남음</span></span></div>
       <div class="road-item"><span class="ck">🔄</span><span class="t"><b>5. 웹 미리보기 검수</b> <span class="sub"><b>웹 배포 완료</b>(위 접속 주소) — 브라우저로 전체 흐름 확인 진행 중</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>6. 소셜 로그인 재등록</b> <span class="sub">새 앱 ID로 카카오·네이버·구글 콘솔 등록(출시 직전)</span></span></div>
       <div class="road-item"><span class="ck">📋</span><span class="t"><b>7. 빌드</b> <span class="sub">안드로이드 APK 먼저(사용자 "빌드해" 시) · iOS 선택(Apple 계정 필요)</span></span></div>
@@ -904,10 +904,20 @@
 
     <div class="section-title">🔧 Lite 수정·보완 내역 <span class="section-note">(Lite 전용 · 최신순)</span></div>
     <div class="road-group">
+      <div class="road-item"><span class="ck">🔧</span><span class="t"><b>10-13</b> · '3D로 보기' 앱 꺼짐·멈춤 수정 <span class="sub">정식 앱 v21과 같은 수정 — 창을 닫으면 그리기 중단·메모리 정리, 휴대폰은 무거운 반사맵 없이 조명만, 3D 엔진 실패 시 SVG판 자동 전환. Lite APK 첫 빌드부터 반영</span></span></div>
       <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-14</b> · 웹 배포 시 폰트 LFS 처리 <span class="sub">HF가 .ttf/.otf 등 바이너리를 LFS로 요구 → dist에 .gitattributes(LFS) 추가하고 기존 커밋 바이너리를 LFS로 이관 후 재배포 성공</span></span></div>
     </div>
 
     <div class="section-title">📜 Lite 전체 개발 히스토리 <span class="section-note">(Lite만 · 날짜순)</span></div>
+    <div class="road-group">
+      <h3 class="rg-done">2026-10-13</h3>
+      <div class="road-item"><span class="ck">•</span><span class="t">3D 안면 스캔 '3D로 보기' 앱 꺼짐·멈춤 수정(정식 앱 v21과 동일)</span></div>
+    </div>
+    <div class="road-group">
+      <h3 class="rg-done">2026-07-23</h3>
+      <div class="road-item"><span class="ck">•</span><span class="t"><b>4단계 1차</b> 앱 전체 문구를 Lite 정체성으로 교체 · <b>2차</b> Lite 구분 아이콘(에메랄드 'LITE' 배지·아이콘 배경, 임시)</span></div>
+      <div class="road-item"><span class="ck">•</span><span class="t"><b>3단계</b> 모든 요청에 X-App-Source: lite 헤더 전송(백엔드가 Lite 기록 구분)</span></div>
+    </div>
     <div class="road-group">
       <h3 class="rg-done">2026-07-14</h3>
       <div class="road-item"><span class="ck">•</span><span class="t"><b>0단계</b> 이름 확정(HeOnn FaceFit Lite) · slug/패키지/번들/scheme 결정</span></div>
