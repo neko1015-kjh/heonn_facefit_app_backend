@@ -336,15 +336,17 @@ def _closed_outline(outer, inner):
 
 def plate_to_dxf(cad):
     """맞춤 유기판 → DXF(R12). 좌표는 디자이너 원본 CAD와 같은 위치(mm)라 원본 위에 그대로 겹쳐 쓸 수 있습니다.
-    레이어: PLATE_OUTLINE(가공 외곽) · CUSTOM_ZONE(맞춤으로 바뀐 구간) · ORIGINAL_EDGE(원본 바깥선, 참고) · HOLES · NOTE"""
+    레이어: PLATE_OUTLINE(가공 외곽) · CUSTOM_ZONE(맞춤으로 바뀐 구간) · ORIGINAL_EDGE(원본 바깥선, 참고) · HOLES · NOTE
+    · SURFACE_Z8: 둥근 바깥면이 높이 +8mm·-8mm에서 지나는 선(실제 높이 z=±8에 그림) — 3D 표면 재작성 가이드 곡선"""
     ent = []
 
-    def line(p, q, layer):
-        ent.append(f"0\nLINE\n8\n{layer}\n10\n{p[0]:.3f}\n20\n{p[1]:.3f}\n30\n0\n11\n{q[0]:.3f}\n21\n{q[1]:.3f}\n31\n0\n")
+    def line(p, q, layer, z=0.0):
+        ent.append(f"0\nLINE\n8\n{layer}\n10\n{p[0]:.3f}\n20\n{p[1]:.3f}\n30\n{z:.3f}\n"
+                   f"11\n{q[0]:.3f}\n21\n{q[1]:.3f}\n31\n{z:.3f}\n")
 
-    def poly(pts, layer):
+    def poly(pts, layer, z=0.0):
         for i in range(len(pts) - 1):
-            line(pts[i], pts[i + 1], layer)
+            line(pts[i], pts[i + 1], layer, z)
 
     def text(x, y, h, s, layer="NOTE"):
         ent.append(f"0\nTEXT\n8\n{layer}\n10\n{x:.3f}\n20\n{y:.3f}\n30\n0\n40\n{h:.2f}\n1\n{s}\n")
@@ -352,6 +354,11 @@ def plate_to_dxf(cad):
     outline = _closed_outline(cad["outer"], cad["inner"])
     poly(outline + [outline[0]], "PLATE_OUTLINE")
     poly(cad["orig_outer"], "ORIGINAL_EDGE")
+    # 둥근 바깥면이 높이 ±EDGE_Z_MM에서 말려 들어간 선(원본 CAD 실측 단면) — 실제 높이에 그려 3D 가이드 곡선으로 사용
+    edge = _surface_edge(cad)
+    if edge:
+        poly(edge, f"SURFACE_Z{EDGE_Z_MM}", z=EDGE_Z_MM)
+        poly(edge, f"SURFACE_Z{EDGE_Z_MM}", z=-EDGE_Z_MM)
     for n in cad["notches"]:
         if not n.get("fixed"):
             poly(cad["outer"][n["i0"]:n["i1"] + 1], "CUSTOM_ZONE")
@@ -373,6 +380,8 @@ def plate_to_dxf(cad):
                       " (~22mm tall, R10-25) - NOT a flat plate edge.")
     text(x0, ny - 6, 3.0, "In CUSTOM_ZONE, re-loft the body/brass outer surface to follow the new outline,"
                           " keeping the original section shape. Elsewhere keep original 3D model.")
+    text(x0, ny - 12, 3.0, f"SURFACE_Z{EDGE_Z_MM}: where the rounded outer surface passes at z=+{EDGE_Z_MM}/-{EDGE_Z_MM}mm"
+                           " (measured from original CAD) - use as loft guide curves.")
     body = "".join(ent)
     return "0\nSECTION\n2\nENTITIES\n" + body + "0\nENDSEC\n0\nEOF\n"
 
@@ -394,6 +403,25 @@ def _outer_normals(outer, inner):
         L = math.hypot(tx, ty) or 1.0
         out.append((ty / L * sgn, -tx / L * sgn))
     return out
+
+
+def _surface_edge(cad, z=None):
+    """둥근 바깥면이 높이 ±z(mm)에서 말려 들어간 선(평면). 원본 CAD 실측 단면 기준, 위·아래 평균.
+    바깥선 + 법선 × u. 측정 간격 흔적을 없애려 앞뒤 ±8점(4mm) 이동 평균. 단면 데이터가 없으면 None."""
+    z = EDGE_Z_MM if z is None else z
+    prof = cad.get("profile")
+    if not prof or z not in prof["z"] or -z not in prof["z"]:
+        return None
+    outer = cad["outer"]
+    nrm = _outer_normals(outer, cad["inner"])
+    zi = (prof["z"].index(z), prof["z"].index(-z))
+    us = []
+    for k in range(len(outer)):
+        sec = _profile_at(prof, k)
+        vals = [sec[j] for j in zi if sec[j] is not None]
+        us.append(sum(vals) / len(vals) if vals else 0.0)
+    sm = [sum(us[max(0, k - 8):k + 9]) / len(us[max(0, k - 8):k + 9]) for k in range(len(us))]
+    return [(p[0] + nrm[k][0] * sm[k], p[1] + nrm[k][1] * sm[k]) for k, p in enumerate(outer)]
 
 
 def plate_svg(cad, W=440, H=520, pad=58):
@@ -419,18 +447,8 @@ def plate_svg(cad, W=440, H=520, pad=58):
         return " ".join(("M" if i == 0 else "L") + f"{X(p[0]):.1f} {Y(p[1]):.1f}" for i, p in enumerate(pts)) + (" Z" if close else "")
 
     parts = [f'<path d="{d(outline, True)}" fill="rgba(245,158,11,0.14)" stroke="#d97706" stroke-width="1.4"/>']
-    # 둥근 바깥면이 말려 들어간 선 = 바깥선 + 법선 × u(높이 ±EDGE_Z_MM 평균) — 모든 단면에 있는 높이라 끊김 없음
-    prof = cad.get("profile")
-    if prof and EDGE_Z_MM in prof["z"] and -EDGE_Z_MM in prof["z"]:
-        zi = (prof["z"].index(EDGE_Z_MM), prof["z"].index(-EDGE_Z_MM))
-        us = []
-        for k in range(len(outer)):
-            sec = _profile_at(prof, k)
-            vals = [sec[j] for j in zi if sec[j] is not None]
-            us.append(sum(vals) / len(vals) if vals else 0.0)
-        # 측정 간격 흔적을 없애려 앞뒤 ±8점(4mm) 이동 평균
-        sm = [sum(us[max(0, k - 8):k + 9]) / len(us[max(0, k - 8):k + 9]) for k in range(len(us))]
-        edge = [(p[0] + nrm[k][0] * sm[k], p[1] + nrm[k][1] * sm[k]) for k, p in enumerate(outer)]
+    edge = _surface_edge(cad)
+    if edge:
         parts.append(f'<path d="{d(edge)}" fill="none" stroke="#a16207" stroke-width="1" stroke-dasharray="2 2"/>')
     parts.append(f'<path d="{d(cad["orig_outer"])}" fill="none" stroke="#a1a1aa" stroke-width="1.1" stroke-dasharray="5 3"/>')
     # 오목면: 맞춤 구간 강조 + 글자(바깥쪽으로 띄워서)
