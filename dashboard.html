@@ -219,7 +219,7 @@
   <header>
     <div class="logo">HeOnn FaceFit</div>
     <div class="sub">서비스 대시보드 · 상태 · 로드맵</div>
-    <div class="updated">마지막 점검: <span id="checked">2026-06-25 (백엔드·DB·웹·갤러리·대시보드 전부 정상 · v11 진짜 카카오 로그인 배포)</span></div>
+    <div class="updated">마지막 점검: <span id="checked">2026-10-13 (백엔드·DB·웹·갤러리·헤드 도면 페이지 전부 정상 · 맞춤 유기판 도면(헤온 원본 기준)·3D 보기 배포)</span></div>
   </header>
 
   <!-- 상단 앱 전환 탭: 정식 앱 / Lite(신규) -->
@@ -413,8 +413,8 @@
   <div class="road-group">
     <h3 class="rg-todo">📋 예정</h3>
     <div class="road-item"><span class="ck">🔄</span><span class="t"><b>iOS(아이폰) 지원</b> <span class="sub">코드 준비 완료(크로스플랫폼)·app.json iOS 설정 반영 → <b>1단계 Expo Go 미리보기 가능(무료)</b>. 2단계 실제 빌드·배포는 Apple 개발자 계정(연 $99)+TestFlight/앱스토어 심사 필요(소셜로그인 시 'Apple로 로그인' 대비)</span></span></div>
-    <div class="road-item"><span class="ck">📋</span><span class="t">실제 구글 로그인 (OAuth) <span class="sub">코드 완료 · Google Cloud 설정 대기 중</span></span></div>
-    <div class="road-item"><span class="ck">📋</span><span class="t">실제 네이버 로그인 (OAuth)</span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">실제 구글 로그인 (OAuth) <span class="sub">웹/앱 완료(2026-06-30) · 현재 테스트 모드 — 정식 출시 시 Google Cloud에서 '게시' 필요</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">실제 네이버 로그인 (OAuth) <span class="sub">웹/앱 완료(2026-06-30)</span></span></div>
   </div>
 
   <div class="section-title">🧠 AI 엔진 보강 계획 <span class="section-note">(백엔드 · 측정 정확도·신뢰도 향상)</span></div>
@@ -478,7 +478,15 @@
   <div class="section-title">📜 전체 개발 히스토리 <span class="section-note">(날짜순 — 개발·수정·업데이트 전부 / 지금부터 모든 내용 여기 기록)</span></div>
 
   <div class="road-group">
-    <h3 class="rg-done">2026-08-10 (오늘)</h3>
+    <h3 class="rg-done">2026-10-12 ~ 13 (오늘)</h3>
+    <div class="road-item"><span class="ck">•</span><span class="t"><b>맞춤 헤드 도면 → 헤온 유기판 맞춤 도면으로 재설계</b> — 기존 도면이 헤온 바디와 맞지 않던 문제. 디자이너 원본 CAD(Final-M-08)의 방짜유기 판 외곽을 기준으로, 바디 조립부(안쪽 선·나사 구멍 4개)는 원본 그대로 두고 얼굴 닿는 오목면만 맞춤. 원본 외곽선은 서버 비밀 설정(HEONN_PLATE)에 보관</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t"><b>맞춤 범위</b> — 왼쪽 긴 면(턱선 곡률)은 사진·3D 모두 맞춤 / 위쪽 홈(턱끝 단면)은 <b>3D 스캔일 때만</b> 맞춤(사진은 원본 유지 — 정면 사진으로 턱끝 단면을 잴 수 없음). 최소 띠 폭 6mm 안전 한도</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">결과 페이지 <b>3D 보기</b>(원본 CAD에서 잰 실제 바깥면 단면, 높이 약 22mm) + <b>디자이너·가공 전달 사항</b>(맞춤 구간은 바디 표면 재작성 필요) 추가</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">앱 결과 화면 항목을 유기판 기준으로 정리(오목면별 원본→맞춤 R) — <b>다음 빌드(v20) 반영</b></span></div>
+  </div>
+
+  <div class="road-group">
+    <h3 class="rg-done">2026-08-10</h3>
     <div class="road-item"><span class="ck">•</span><span class="t">추천 제품 이미지 <b>회사망 차단 대비 대체 처리</b> — 설정 탭 제품 카드의 외부 이미지(unsplash) 로딩 실패 시 아이콘 자동 대체. <b>웹 재배포 완료</b>(회사망 사용자 즉시 적용), 앱은 다음 빌드(v20) 반영</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">헤드 CAD 개선 3건 — <b>STL 정점 중복 제거</b>(9,126→1,600 검증) · <b>자동 정렬 수동 뒤집기</b>(/head/build 체크박스) · <b>결합부 실측치 고정 구조</b>(_MOUNT_SPEC 한 곳, 확정 시 전체 고정). 합성 STL 실동작 검증 + pytest 8건 통과, HF 배포</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">앱 <b>v19</b> APK 빌드·배포 — BLE 통신 계층 포함(<b>설치 가능한 최신</b>)</span></div>
@@ -597,7 +605,8 @@
   </div>
   <div class="road-group">
     <h3 class="rg-done">🤖 엔진(백엔드) 배포</h3>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">동일인 인식률 개선 <span class="sub">정확한 눈 중심 정렬 + 저품질 가드 → 인식률 80%→100%, 종합 96점 — 최신</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">헤온 유기판 맞춤 도면 <span class="sub">원본 CAD 기준 · 바디 조립부 원본 유지 · 오목면 맞춤(3D 스캔은 위쪽 홈까지) · 3D 보기 · DXF 원본 좌표 — 최신 (2026-10-13)</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">동일인 인식률 개선 <span class="sub">정확한 눈 중심 정렬 + 저품질 가드 → 인식률 80%→100%, 종합 96점</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">AI 정확도 검증 종합 리포트(/validation) + 동일인 인식률 <span class="sub">검출·정확도·Zone·동일인·재현성·실사용 종합</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">3D 안면 스캔 각도 보정 반영 <span class="sub">기울여 찍어도 똑바로 선 얼굴로 3D 표시 — 갤러리 즉시 적용 / 앱은 다음 빌드</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">정식 얼굴 임베딩(SFace) 동일인 판별 <span class="sub">각도·표정에 강함(변형 유사도 0.98+) — 비율 방식 오탐 해결</span></span></div>
@@ -623,6 +632,10 @@
 
   <div class="section-title">🔧 수정·보완 내역 <span class="section-note">(버그 수정·개선 기록 — 최신순, 계속 추가)</span></div>
   <div class="road-group">
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>10-13</b> · 유기판 3D 보기를 실제 단면으로 / R1 라운드 지시 되돌림 <span class="sub">CAD 분석 결과 2mm 판은 바디 가운데 높이 기준선이었고, 실제 얼굴 닿는 면은 높이 약 22mm·단면 R10~25mm의 둥근 바디 표면(직각 모서리 없음). 잘못 넣었던 R1 라운드 지시를 빼고 3D 보기를 실측 단면으로 교체</span></span></div>
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>10-12</b> · 사진으로 만든 위쪽 홈이 거의 평평해지던 문제 <span class="sub">실제 사진 3장에서 깊이 5.9→1.4~1.8mm. 정면 사진은 턱끝 '정면 윤곽'만 재고, 홈이 감싸는 것은 턱끝 '단면'이라 생긴 문제 → 사진은 원본 유지, 3D 스캔만 단면 측정으로 맞춤</span></span></div>
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>10-12</b> · 헤드 도면이 헤온 바디와 맞지 않던 문제 <span class="sub">임의의 '헤드+돌기+나사 2개' 형상이었던 것 → 헤온 원본 유기판(나사 4개·⌀2mm, 바디 나사 기둥과 위치 일치 확인) 기준으로 재설계</span></span></div>
+    <div class="road-item"><span class="ck">🔧</span><span class="t"><b>10-12</b> · 헤드 접촉 곡선 방향 수정 <span class="sub">얼굴 모양(볼록)을 그대로 그리던 것 → 턱이 들어가는 오목한 형상으로</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-14</b> · 서버 다운 재발 방지 2차 (로그인 등 전체 503) <span class="sub">"Launch timed out, workload was not healthy 30min" — DB 시작 실패 시 예외를 던져 서버가 아예 안 뜨던 문제. → 시작 시 DB가 안 돼도 <b>서버는 무조건 기동</b>(비차단)하고 <b>백그라운드에서 계속 재시도</b>해 DB 깨어나면 표 준비. Space 재시작으로 즉시 복구 후 배포</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-09</b> · 서버 다운 복구 + 재발 방지(로그인 등 전체 503) <span class="sub">Neon(무료 플랜) DB가 절전에서 깨어나던 중 첫 연결이 일시 실패("Control plane request failed")해 <b>서버 시작이 통째로 실패(RUNTIME_ERROR)</b> → 카카오 로그인 포함 모든 기능이 안 되던 문제. Space 재시작으로 즉시 복구 + 시작 시 DB 연결을 <b>재시도(8회·5초)</b>로 감싸 일시 실패에 죽지 않게 개선(HF 배포)</span></span></div>
     <div class="road-item"><span class="ck">🔧</span><span class="t"><b>07-01</b> · 분석 실패 시 "다시 시도" 버튼 <span class="sub">방금 그 사진으로 바로 재분석 — 콜드스타트·일시적 연결 오류에 사용자가 쉽게 재시도(웹 미리보기 즉시 반영)</span></span></div>
@@ -689,11 +702,15 @@
     <div class="road-item"><span class="ck">🟡</span><span class="t">딥러닝 조밀 복원(3DDFA/DECA) <span class="sub">주름·표정까지 정밀 복원 — 단 BFM/FLAME <b>상용 라이선스 확보 후</b> 적용</span></span></div>
   </div>
   <div class="road-group">
-    <h3 class="rg-todo">📐 맞춤 헤드 CAD</h3>
+    <h3 class="rg-todo">📐 맞춤 유기판 도면 (헤드 CAD)</h3>
     <div class="road-item done"><span class="ck">✅</span><span class="t">STL 정점 중복 제거 <span class="sub">2026-08-10 — 삼각형마다 반복 저장되는 정점(평균 6배)을 제거해 메모리↓·턱선 추출 안정성↑ (검증: 9,126→1,600 고유점)</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">3D 자동 정렬 수동 뒤집기 옵션 <span class="sub">2026-08-10 — /head/build 3D 폼에 위아래·좌우·앞뒤 뒤집기 체크박스. 자동 정렬(PCA)이 드물게 방향을 반대로 잡을 때 바로잡기</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">본체 결합부 실측치 고정 구조 <span class="sub">2026-08-10 — 치수를 서버 한 곳(_MOUNT_SPEC)에 집중. 실측 확정 시 True 한 번이면 모든 도면(웹·앱·갤러리)에 고정 적용</span></span></div>
-    <div class="road-item"><span class="ck">🟡</span><span class="t">본체 실측치 입력 <span class="sub">디바이스 본체 결합부 실제 치수(돌기폭·구멍간격·구멍경·헤드폭·두께)가 확정되면 _MOUNT_SPEC에 넣고 고정(measured=True)</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">헤온 원본 CAD 기준 맞춤 설계 <span class="sub">2026-10-12 — 본체 실측치 입력 대신 디자이너 원본 CAD(Final-M-08)의 유기판 외곽·나사 구멍을 그대로 사용(바디 조립 보장). 위 '결합부 실측치' 방식은 대체됨</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">3D 보기 · 디자이너 전달 사항 · 3D 스캔 위쪽 홈 맞춤 <span class="sub">2026-10-13 — 결과 페이지 3D(실측 단면), DXF NOTE, 턱끝 세로 단면 측정</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">디자이너 확인 <span class="sub">최소 띠 폭 6mm 적정성 · 맞춤 구간 바디/유기판 3D 표면 재작성 방법 · 가공 가능 여부</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">실제 3D 스캔으로 위쪽 홈 맞춤 검증 <span class="sub">지금은 합성 데이터로만 시험 — 아이폰 LiDAR 등 실제 얼굴 스캔으로 확인 필요</span></span></div>
+    <div class="road-item"><span class="ck">🟡</span><span class="t">앱 v20 빌드 <span class="sub">결과 화면 '맞춤 유기판' 항목 정리 + 추천 이미지 대체 처리 반영</span></span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-todo">🧭 기기 연동(BLE)</h3>
@@ -887,7 +904,7 @@
 
     <div class="section-title">📜 Lite 전체 개발 히스토리 <span class="section-note">(Lite만 · 날짜순)</span></div>
     <div class="road-group">
-      <h3 class="rg-done">2026-07-14 (오늘)</h3>
+      <h3 class="rg-done">2026-07-14</h3>
       <div class="road-item"><span class="ck">•</span><span class="t"><b>0단계</b> 이름 확정(HeOnn FaceFit Lite) · slug/패키지/번들/scheme 결정</span></div>
       <div class="road-item"><span class="ck">•</span><span class="t"><b>1단계</b> 정식 앱 복제 → 새 정체성 반영 → GitHub 저장소(neko1015-kjh/heonn_facefit_lite_mobile, 비공개) 생성·푸시 → 의존성 설치·타입검사 통과</span></div>
       <div class="road-item"><span class="ck">•</span><span class="t"><b>2단계</b> 기기 연결(페어링·셋팅)·맞춤 헤드 CAD 제거 + 흐름 단순화(로그인→바로 분석). PairingScreen·CalibrationScreen·MultiViewCapture 삭제 · 타입검사 통과</span></div>
