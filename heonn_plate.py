@@ -377,9 +377,33 @@ def plate_to_dxf(cad):
     return "0\nSECTION\n2\nENTITIES\n" + body + "0\nENDSEC\n0\nEOF\n"
 
 
-def plate_svg(cad, W=420, H=480, pad=24):
-    """미리보기 SVG — 원본 바깥선(점선) 위에 맞춤 외곽(금색)과 바뀐 구간(강조)을 겹쳐 그립니다."""
-    outline = _closed_outline(cad["outer"], cad["inner"])
+# 평면도에 '둥근 바깥면이 말려 들어간 선'을 그릴 높이(mm, 가운데 기준 위·아래). 모든 측정 단면에 있는 높이.
+EDGE_Z_MM = 8
+
+
+def _outer_normals(outer, inner):
+    """바깥선 점마다 판 바깥(얼굴 쪽)을 향하는 단위 법선."""
+    loop = _closed_outline(outer, inner)
+    area = sum(loop[i][0] * loop[(i + 1) % len(loop)][1] - loop[(i + 1) % len(loop)][0] * loop[i][1]
+               for i in range(len(loop)))
+    sgn = 1 if area > 0 else -1     # 반시계면 진행 방향 오른쪽이 바깥
+    out = []
+    for i in range(len(outer)):
+        a = outer[max(i - 1, 0)]; b = outer[min(i + 1, len(outer) - 1)]
+        tx, ty = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(tx, ty) or 1.0
+        out.append((ty / L * sgn, -tx / L * sgn))
+    return out
+
+
+def plate_svg(cad, W=440, H=520, pad=58):
+    """평면도 SVG — 위에서 본 유기판(가운데 높이 외곽)에 최신 설계 정보를 함께 표시합니다.
+    · 금색 면/선: 가운데 높이 외곽(가장 바깥 = 얼굴에 처음 닿는 선) · 점선: 원본 바깥선
+    · 가는 안쪽 선: 둥근 바깥면이 위·아래로 말려 들어가 끝나는 선(원본 CAD 실측 단면)
+    · 오목면별 글자: 원본 유지 / R 원본→맞춤 · 나사 구멍 · 20mm 축척"""
+    outer, inner = cad["outer"], cad["inner"]
+    outline = _closed_outline(outer, inner)
+    nrm = _outer_normals(outer, inner)
     allp = outline + cad["orig_outer"]
     minx = min(p[0] for p in allp); maxx = max(p[0] for p in allp)
     miny = min(p[1] for p in allp); maxy = max(p[1] for p in allp)
@@ -394,16 +418,51 @@ def plate_svg(cad, W=420, H=480, pad=24):
     def d(pts, close=False):
         return " ".join(("M" if i == 0 else "L") + f"{X(p[0]):.1f} {Y(p[1]):.1f}" for i, p in enumerate(pts)) + (" Z" if close else "")
 
-    parts = [f'<path d="{d(outline, True)}" fill="rgba(245,158,11,0.16)" stroke="#d97706" stroke-width="1.4"/>',
-             f'<path d="{d(cad["orig_outer"])}" fill="none" stroke="#71717a" stroke-width="1.2" stroke-dasharray="4 3"/>']
+    parts = [f'<path d="{d(outline, True)}" fill="rgba(245,158,11,0.14)" stroke="#d97706" stroke-width="1.4"/>']
+    # 둥근 바깥면이 말려 들어간 선 = 바깥선 + 법선 × u(높이 ±EDGE_Z_MM 평균) — 모든 단면에 있는 높이라 끊김 없음
+    prof = cad.get("profile")
+    if prof and EDGE_Z_MM in prof["z"] and -EDGE_Z_MM in prof["z"]:
+        zi = (prof["z"].index(EDGE_Z_MM), prof["z"].index(-EDGE_Z_MM))
+        us = []
+        for k in range(len(outer)):
+            sec = _profile_at(prof, k)
+            vals = [sec[j] for j in zi if sec[j] is not None]
+            us.append(sum(vals) / len(vals) if vals else 0.0)
+        # 측정 간격 흔적을 없애려 앞뒤 ±8점(4mm) 이동 평균
+        sm = [sum(us[max(0, k - 8):k + 9]) / len(us[max(0, k - 8):k + 9]) for k in range(len(us))]
+        edge = [(p[0] + nrm[k][0] * sm[k], p[1] + nrm[k][1] * sm[k]) for k, p in enumerate(outer)]
+        parts.append(f'<path d="{d(edge)}" fill="none" stroke="#a16207" stroke-width="1" stroke-dasharray="2 2"/>')
+    parts.append(f'<path d="{d(cad["orig_outer"])}" fill="none" stroke="#a1a1aa" stroke-width="1.1" stroke-dasharray="5 3"/>')
+    # 오목면: 맞춤 구간 강조 + 글자(바깥쪽으로 띄워서)
     for n in cad["notches"]:
-        if n.get("fixed"):
-            continue
-        parts.append(f'<path d="{d(cad["outer"][n["i0"]:n["i1"] + 1])}" fill="none" stroke="#fbbf24" '
-                     f'stroke-width="4.5" stroke-linecap="round"/>')
+        seg = outer[n["i0"]:n["i1"] + 1]
+        if not n.get("fixed"):
+            parts.append(f'<path d="{d(seg)}" fill="none" stroke="#fbbf24" stroke-width="4.5" stroke-linecap="round"/>')
+        mi = (n["i0"] + n["i1"]) // 2
+        gap = 14 if n["id"] == "chin" else 9          # 글자를 테두리 바깥으로 띄우는 거리(mm)
+        mx_, my_ = outer[mi][0] + nrm[mi][0] * gap, outer[mi][1] + nrm[mi][1] * gap
+        anchor = "middle" if abs(nrm[mi][0]) < 0.5 else ("end" if nrm[mi][0] < 0 else "start")
+        name = "위쪽 홈" if n["id"] == "chin" else "왼쪽 긴 면"
+        line2 = (f"원본 유지 · R{n['radius']:g}" if n.get("fixed")
+                 else f"R{n['orig_radius']:g}→{n['radius']:g}" + (" (한도)" if n.get("limited") else ""))
+        col = "#a1a1aa" if n.get("fixed") else "#fcd34d"
+        tx, ty = X(mx_), Y(my_)
+        parts.append(f'<text x="{tx:.1f}" y="{ty - 6:.1f}" fill="{col}" font-size="11" font-weight="700" text-anchor="{anchor}">{name}</text>'
+                     f'<text x="{tx:.1f}" y="{ty + 8:.1f}" fill="{col}" font-size="10.5" text-anchor="{anchor}">{line2} mm</text>')
+    # 나사 구멍(바디 조립부 — 원본 그대로)
     for h in cad["holes"]:
         parts.append(f'<circle cx="{X(h["x"]):.1f}" cy="{Y(h["y"]):.1f}" r="{max(2.5, h["d"] / 2 * s):.1f}" '
-                     f'fill="#09090b" stroke="#a1a1aa" stroke-width="1.3"/>')
+                     f'fill="#09090b" stroke="#e4e4e7" stroke-width="1.2"/>')
+    if cad["holes"]:
+        h = max(cad["holes"], key=lambda q: q["y"])
+        parts.append(f'<text x="{X(h["x"]) + 34:.1f}" y="{Y(h["y"]) + 46:.1f}" fill="#a1a1aa" font-size="10">'
+                     f'나사 ⌀{h["d"]:g} ×{len(cad["holes"])} (원본)</text>')
+    # 20mm 축척 막대
+    bx, by = 14, H - 16
+    parts.append(f'<line x1="{bx}" y1="{by}" x2="{bx + 20 * s:.1f}" y2="{by}" stroke="#e4e4e7" stroke-width="2"/>'
+                 f'<line x1="{bx}" y1="{by - 4}" x2="{bx}" y2="{by + 4}" stroke="#e4e4e7"/>'
+                 f'<line x1="{bx + 20 * s:.1f}" y1="{by - 4}" x2="{bx + 20 * s:.1f}" y2="{by + 4}" stroke="#e4e4e7"/>'
+                 f'<text x="{bx + 10 * s:.1f}" y="{by - 7}" fill="#e4e4e7" font-size="10" text-anchor="middle">20 mm</text>')
     return (f'<svg width="100%" viewBox="0 0 {W} {H}" style="max-width:{W}px">' + "".join(parts) + "</svg>")
 
 

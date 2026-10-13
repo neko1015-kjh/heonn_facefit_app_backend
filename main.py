@@ -3277,7 +3277,8 @@ def _render_plate_page(cad, dxf_href):
   <div class="tabs"><button class="tb on" data-t="t3d">🧊 3D 보기</button><button class="tb" data-t="t2d">📐 평면도</button></div>
   <div id="t3d">{heonn_plate.plate_viewer_html(cad)}</div>
   <div id="t2d" style="display:none">{heonn_plate.plate_svg(cad)}
-  <div class="lg"><span><i style="border-color:#fbbf24"></i>맞춤으로 바뀐 구간</span><span><i style="border-color:#d97706"></i>유기판 외곽</span><span><i style="border-color:#71717a;border-top-style:dashed"></i>원본 바깥선</span></div></div>
+  <div class="lg"><span><i style="border-color:#fbbf24"></i>맞춤으로 바뀐 구간</span><span><i style="border-color:#d97706"></i>가운데 높이 외곽(얼굴에 처음 닿는 선)</span><span><i style="border-color:#a1a1aa;border-top-style:dashed"></i>원본 바깥선</span><span><i style="border-color:#a16207;border-top-style:dotted"></i>둥근 바깥면이 높이 ±{heonn_plate.EDGE_Z_MM}mm에서 들어간 선(원본 CAD 단면)</span></div>
+  <div class="note" style="margin-top:6px">위에서 본 평면도(축척 막대 20mm). 바디 조립부(안쪽 선·나사 구멍)는 원본 그대로이고, 글자는 오목면별 홈 반지름(원본 → 맞춤)입니다.</div></div>
   <script>
     document.querySelectorAll('.tb').forEach(function(b){{ b.onclick=function(){{
       document.querySelectorAll('.tb').forEach(function(x){{ x.classList.toggle('on', x===b); }});
