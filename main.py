@@ -3263,6 +3263,7 @@ def _render_plate_page(cad, dxf_href):
     {rows}
     <tr><td class="k" style="padding-top:14px">바디 조립부 (안쪽 선 · 나사 구멍 {len(holes)}개 ⌀{holes[0]['d'] if holes else '-'})</td><td class="v" style="padding-top:14px">원본 그대로</td></tr>
     <tr><td class="k">판 두께 · 전체 최소 띠 폭</td><td class="v">{cad['thickness']} · {cad['head_width']} mm</td></tr>
+    <tr><td class="k">얼굴 닿는 바깥 모서리 (위·아래)</td><td class="v">완전 라운드 R {heonn_plate.EDGE_ROUND_MM:g} mm</td></tr>
   </table>
   <a class="dl" href="{dxf_href}" download="heonn_plate.dxf">📐 맞춤 유기판 도면(DXF) 내려받기</a>
   <div class="use">
