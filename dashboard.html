@@ -250,8 +250,8 @@
     </div>
     <div class="status-card">
       <div class="status-head"><div class="status-name">📱 모바일 앱</div><span class="badge b-ok">빌드됨</span></div>
-      <div class="status-desc">안드로이드 APK 설치 가능 (com.heonn.facefit · v19 · BLE 통신 계층 — 실기기 검색·연결 + 데모 폴백)</div>
-      <a class="status-link" href="https://expo.dev/artifacts/eas/_4jxq2K2oIRauge7N_VEgrzDF-0VtTp1w65-vjJo5Rc.apk" target="_blank" rel="noopener">APK 내려받기 ↗</a>
+      <div class="status-desc">안드로이드 APK 설치 가능 (com.heonn.facefit · v20 · 맞춤 유기판 결과 화면 + 추천 이미지 대체 처리)</div>
+      <a class="status-link" href="https://expo.dev/artifacts/eas/je1NkPLxQ3-zWDY6qbCTUsce31cXUPgq7JPg82aEvb0.apk" target="_blank" rel="noopener">APK 내려받기 ↗</a>
     </div>
   </div>
 
@@ -281,9 +281,9 @@
     <div class="card-body">
       <div class="card-title">모바일 앱(APK) <span class="tag tag-live">빌드됨</span></div>
       <div class="card-desc">안드로이드 폰에서 링크 열어 설치 (com.heonn.facefit)</div>
-      <a class="card-url" href="https://expo.dev/accounts/neko1015/projects/facefit/builds/421361f3-7199-4d78-be16-73e8b7b576b2" target="_blank" rel="noopener">v19 APK 설치 (링크 열기)</a>
+      <a class="card-url" href="https://expo.dev/accounts/neko1015/projects/facefit/builds/ffaab815-5d11-4628-8cf5-e37c08727f18" target="_blank" rel="noopener">v20 APK 설치 (링크 열기)</a>
     </div>
-    <a class="copy-btn" href="https://expo.dev/accounts/neko1015/projects/facefit/builds/421361f3-7199-4d78-be16-73e8b7b576b2" target="_blank" rel="noopener">열기 ↗</a>
+    <a class="copy-btn" href="https://expo.dev/accounts/neko1015/projects/facefit/builds/ffaab815-5d11-4628-8cf5-e37c08727f18" target="_blank" rel="noopener">열기 ↗</a>
   </div>
 
   <div class="card">
@@ -445,7 +445,7 @@
     <div class="road-item done"><span class="ck">✅</span><span class="t">DB 연결 안전 처리 (최우선) <span class="sub">모든 반복 호출 엔드포인트를 with(자동 닫기)로 전환 — 오류 나도 연결 누수 없음(Neon 한도 초과 예방) — 배포</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">전역 예외 핸들러 추가 <span class="sub">예상 못한 오류 시 스택트레이스 대신 친절한 안내 JSON — 배포</span></span></div>
     <div class="road-item done"><span class="ck">✅</span><span class="t">분석(mediapipe/OpenCV) 예외 처리 <span class="sub">검출 단계 보호 + 항목별 부분 실패 허용(주름 등 하나 실패해도 나머지 정상) — 이상 이미지에도 안내만 반환, 서버 안 죽음 — 배포</span></span></div>
-    <div class="road-item done"><span class="ck">✅</span><span class="t">추천 제품 이미지 외부 URL(unsplash) 대체 처리 <span class="sub">2026-08-10 — 이미지 로딩 실패(회사망 차단 등) 시 아이콘으로 자동 대체. 웹 재배포 완료, 앱은 다음 빌드(v20) 반영</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">추천 제품 이미지 외부 URL(unsplash) 대체 처리 <span class="sub">2026-08-10 — 이미지 로딩 실패(회사망 차단 등) 시 아이콘으로 자동 대체. 웹 재배포 완료, 앱 v20 반영(2026-10-13 빌드)</span></span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-done">프론트 (앱) — 대체로 양호</h3>
@@ -482,7 +482,7 @@
     <div class="road-item"><span class="ck">•</span><span class="t"><b>맞춤 헤드 도면 → 헤온 유기판 맞춤 도면으로 재설계</b> — 기존 도면이 헤온 바디와 맞지 않던 문제. 디자이너 원본 CAD(Final-M-08)의 방짜유기 판 외곽을 기준으로, 바디 조립부(안쪽 선·나사 구멍 4개)는 원본 그대로 두고 얼굴 닿는 오목면만 맞춤. 원본 외곽선은 서버 비밀 설정(HEONN_PLATE)에 보관</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t"><b>맞춤 범위</b> — 왼쪽 긴 면(턱선 곡률)은 사진·3D 모두 맞춤 / 위쪽 홈(턱끝 단면)은 <b>3D 스캔일 때만</b> 맞춤(사진은 원본 유지 — 정면 사진으로 턱끝 단면을 잴 수 없음). 최소 띠 폭 6mm 안전 한도</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">결과 페이지 <b>3D 보기</b>(원본 CAD에서 잰 실제 바깥면 단면, 높이 약 22mm) + <b>디자이너·가공 전달 사항</b>(맞춤 구간은 바디 표면 재작성 필요) 추가</span></div>
-    <div class="road-item"><span class="ck">•</span><span class="t">앱 결과 화면 항목을 유기판 기준으로 정리(오목면별 원본→맞춤 R) — 앱 <b>v20</b> 버전업·빌드 진행 / <b>웹 재배포 완료</b>(10-13)</span></div>
+    <div class="road-item"><span class="ck">•</span><span class="t">앱 결과 화면 항목을 유기판 기준으로 정리(오목면별 원본→맞춤 R) — 앱 <b>v20 APK 빌드·배포</b>(설치 가능한 최신) / <b>웹 재배포 완료</b>(10-13)</span></div>
     <div class="road-item"><span class="ck">•</span><span class="t">평면도 최신화(둥근 바깥면 선·오목면별 결과·나사·축척) + DXF에 <b>둥근 바깥면 가이드 곡선</b>(SURFACE_Z8, z=±8mm) 레이어 추가</span></div>
   </div>
 
@@ -585,7 +585,8 @@
   <div class="section-title">🗓️ 배포 내역 <span class="section-note">(수정·배포된 버전 기록 — 최신순)</span></div>
   <div class="road-group">
     <h3 class="rg-done">📱 앱(APK) 버전</h3>
-    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v19</b> · BLE 통신 계층 <span class="sub">기기 검색·연결·온도/진동 명령 전송·배터리/상태 수신 + 기기 없으면 데모 모드 자동 폴백 (실기기 테스트는 하드웨어 BLE 스펙 확보 후) — <b>설치 가능한 최신</b> · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/421361f3-7199-4d78-be16-73e8b7b576b2" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-08-10 빌드)</span></span></div>
+    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v20</b> · 맞춤 유기판 결과 화면 + 추천 이미지 대체 <span class="sub">맞춤 도면 결과를 헤온 유기판 기준(오목면별 원본→맞춤 R, 원본 유지·안전 한도 표시)으로 정리 · 추천 제품 이미지 로딩 실패 시 아이콘 대체 — <b>설치 가능한 최신</b> · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/ffaab815-5d11-4628-8cf5-e37c08727f18" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-10-13 빌드)</span></span></div>
+    <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v19</b> · BLE 통신 계층 <span class="sub">기기 검색·연결·온도/진동 명령 전송·배터리/상태 수신 + 기기 없으면 데모 모드 자동 폴백 (실기기 테스트는 하드웨어 BLE 스펙 확보 후) · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/421361f3-7199-4d78-be16-73e8b7b576b2" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-08-10 빌드)</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v18</b> · 맞춤 헤드 인앱 다중뷰 가이드 촬영 <span class="sub">인앱 카메라 다중뷰(정면·좌·우) 고개각도 안내 + 3·2·1 자동촬영 → 맞춤 헤드 도면(측정값·DXF) 앱에서 저장 포함 · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/fcce1ac5-4fbd-495e-a5b8-f9e150328715" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-07-08 빌드)</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v17</b> · 인앱카메라 자동촬영·전후슬라이더·셋팅 가이드 <span class="sub">인앱 카메라(3·2·1 자동촬영·딤·분석연결)·전후 슬라이더 부드럽게·분석 실패 다시시도·기기 셋팅 가이드·문구 변경 포함 · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/dd1f0ad4-9667-45a5-b9eb-93894ce499d5" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-07-08 빌드)</span></span></div>
     <div class="road-item done"><span class="ck">🚀</span><span class="t"><b>v16</b> · three.js 3D·얼굴 부위 미니맵·사진 얼굴크롭 <span class="sub">three.js 3D 엔진(청동 조각상)·조밀화·얼굴 부위 미니맵·사진 얼굴만 표시·3D 코깊이/매트 튜닝 포함 · <a href="https://expo.dev/accounts/neko1015/projects/facefit/builds/fcb4eb14-5cb9-475f-b505-1a43cb528f42" target="_blank" rel="noopener" style="color:var(--amber)">설치 링크 ↗</a> (2026-07-01 빌드)</span></span></div>
@@ -711,7 +712,7 @@
     <div class="road-item done"><span class="ck">✅</span><span class="t">3D 보기 · 디자이너 전달 사항 · 3D 스캔 위쪽 홈 맞춤 <span class="sub">2026-10-13 — 결과 페이지 3D(실측 단면), DXF NOTE, 턱끝 세로 단면 측정</span></span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">디자이너 확인 <span class="sub">최소 띠 폭 6mm 적정성 · 맞춤 구간 바디/유기판 3D 표면 재작성 방법 · 가공 가능 여부</span></span></div>
     <div class="road-item"><span class="ck">🟡</span><span class="t">실제 3D 스캔으로 위쪽 홈 맞춤 검증 <span class="sub">지금은 합성 데이터로만 시험 — 아이폰 LiDAR 등 실제 얼굴 스캔으로 확인 필요</span></span></div>
-    <div class="road-item"><span class="ck">🟡</span><span class="t">앱 v20 빌드 <span class="sub">결과 화면 '맞춤 유기판' 항목 정리 + 추천 이미지 대체 처리 반영</span></span></div>
+    <div class="road-item done"><span class="ck">✅</span><span class="t">앱 v20 빌드 <span class="sub">2026-10-13 — 결과 화면 '맞춤 유기판' 항목 정리 + 추천 이미지 대체 처리 반영</span></span></div>
   </div>
   <div class="road-group">
     <h3 class="rg-todo">🧭 기기 연동(BLE)</h3>
