@@ -64,3 +64,24 @@ def test_perturb_keeps_image_shape():
     img = np.full((240, 200, 3), 128, dtype=np.uint8)
     out = main._perturb_image(img, 5, 1.05, 1.0, 1.0, 2, -2)
     assert out.ndim == 3 and out.shape[2] == 3
+
+
+# ── 회원 분리(정식 앱 / Lite 앱) ──
+def test_social_user_separated_by_app():
+    pid = "test-sep-" + os.urandom(4).hex()
+    full1 = main._social_user_token("kakao", pid, "테스트", "native")
+    full2 = main._social_user_token("kakao", pid, "테스트", "web")
+    lite1 = main._social_user_token("kakao", pid, "테스트", "native_lite")
+    lite2 = main._social_user_token("kakao", pid, "테스트", "native_lite")
+    # 정식 앱·웹은 같은 회원, Lite는 같은 소셜 계정이라도 별도 회원
+    assert full1 == full2
+    assert lite1 == lite2
+    assert full1 != lite1
+
+
+def test_guest_login_lite_header_creates_lite_user():
+    r = client.post("/auth/login", json={"provider": "guest"}, headers={"X-App-Source": "lite"})
+    token = r.json()["token"]
+    with main.db.connect() as conn:
+        row = conn.execute("SELECT app_source FROM users WHERE token = ?", (token,)).fetchone()
+    assert row[0] == "lite"

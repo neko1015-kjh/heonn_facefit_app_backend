@@ -177,6 +177,8 @@ def _init_db():
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id TEXT DEFAULT ''")
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_at TEXT DEFAULT ''")
         conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS marketing INTEGER DEFAULT 0")
+        # 회원이 어느 앱 계정인지(정식='full' / Lite='lite'). 같은 소셜 계정이라도 앱별로 따로 가입됩니다.
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS app_source TEXT DEFAULT 'full'")
         conn.execute(f"ALTER TABLE scans ADD COLUMN IF NOT EXISTS image_data {db.BLOB}")
     else:
         ucols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
@@ -184,6 +186,8 @@ def _init_db():
             conn.execute("ALTER TABLE users ADD COLUMN provider_id TEXT DEFAULT ''")
         if "consent_at" not in ucols:
             conn.execute("ALTER TABLE users ADD COLUMN consent_at TEXT DEFAULT ''")
+        if "app_source" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN app_source TEXT DEFAULT 'full'")
         if "marketing" not in ucols:
             conn.execute("ALTER TABLE users ADD COLUMN marketing INTEGER DEFAULT 0")
     conn.commit()
@@ -491,16 +495,18 @@ def _current_user_id(authorization: str | None):
 
 # 로그인: 소셜 버튼을 누르면 사용자를 만들고 토큰을 발급합니다.
 @app.post("/auth/login")
-def auth_login(payload: dict):
+def auth_login(payload: dict, x_app_source: str = Header(None)):
     provider = (payload or {}).get("provider", "guest")
     name = (payload or {}).get("name") or f"{provider} 사용자"
     token = uuid.uuid4().hex
     created_at = datetime.now().isoformat(timespec="seconds")
+    # Lite 앱은 'X-App-Source: lite' 헤더를 보냄 → Lite 계정으로 가입
+    app_source = "lite" if (x_app_source or "").strip().lower() == "lite" else "full"
     # RETURNING id 는 SQLite(3.35+)와 PostgreSQL 양쪽에서 새 id를 돌려줍니다.
     with db.connect() as conn:
         cur = conn.execute(
-            "INSERT INTO users (token, provider, display_name, created_at) VALUES (?, ?, ?, ?) RETURNING id",
-            (token, provider, name, created_at),
+            "INSERT INTO users (token, provider, display_name, created_at, app_source) VALUES (?, ?, ?, ?, ?) RETURNING id",
+            (token, provider, name, created_at, app_source),
         )
         uid = cur.fetchone()[0]
         conn.commit()
@@ -561,6 +567,26 @@ def _oauth_redirect(state, token=None):
     return f"{base}?login_error=1"
 
 
+def _social_user_token(provider, provider_id, name, state):
+    """소셜 계정으로 우리 회원 토큰을 찾거나 새로 만듭니다.
+    같은 소셜 계정이라도 Lite 앱(state='native_lite')과 정식 앱·웹은 서로 다른 회원으로 따로 관리합니다."""
+    app_source = "lite" if state == "native_lite" else "full"
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT token FROM users WHERE provider = ? AND provider_id = ? AND app_source = ?",
+            (provider, provider_id, app_source),
+        ).fetchone()
+        if row:
+            return row[0]
+        token = uuid.uuid4().hex
+        conn.execute(
+            "INSERT INTO users (token, provider, provider_id, display_name, created_at, app_source) VALUES (?, ?, ?, ?, ?, ?)",
+            (token, provider, provider_id, name, datetime.now().isoformat(timespec="seconds"), app_source),
+        )
+        conn.commit()
+        return token
+
+
 @app.get("/auth/kakao/login")
 def kakao_login(state: str = "web"):
     """카카오 인증 페이지로 보냅니다. state로 웹/앱(native) 복귀 대상을 구분합니다."""
@@ -608,20 +634,8 @@ def kakao_callback(code: str = "", state: str = "web"):
         if not kakao_id:
             return RedirectResponse(_oauth_redirect(state))
 
-        # 3) 같은 카카오 계정이면 기존 사용자 재사용, 없으면 새로 생성
-        with db.connect() as conn:
-            row = conn.execute(
-                "SELECT token FROM users WHERE provider = 'kakao' AND provider_id = ?", (kakao_id,)
-            ).fetchone()
-            if row:
-                token = row[0]
-            else:
-                token = uuid.uuid4().hex
-                conn.execute(
-                    "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
-                    (token, "kakao", kakao_id, nickname, datetime.now().isoformat(timespec="seconds")),
-                )
-                conn.commit()
+        # 3) 같은 카카오 계정(같은 앱)이면 기존 사용자 재사용, 없으면 새로 생성
+        token = _social_user_token("kakao", kakao_id, nickname, state)
 
         # 4) 웹/앱으로 토큰 전달 (프론트가 URL의 token을 읽어 로그인 처리)
         return RedirectResponse(_oauth_redirect(state, token))
@@ -683,20 +697,8 @@ def google_callback(code: str = "", state: str = "web"):
         if not google_id:
             return RedirectResponse(_oauth_redirect(state))
 
-        # 3) 같은 구글 계정이면 기존 사용자 재사용, 없으면 새로 생성
-        with db.connect() as conn:
-            row = conn.execute(
-                "SELECT token FROM users WHERE provider = 'google' AND provider_id = ?", (google_id,)
-            ).fetchone()
-            if row:
-                token = row[0]
-            else:
-                token = uuid.uuid4().hex
-                conn.execute(
-                    "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
-                    (token, "google", google_id, name, datetime.now().isoformat(timespec="seconds")),
-                )
-                conn.commit()
+        # 3) 같은 구글 계정(같은 앱)이면 기존 사용자 재사용, 없으면 새로 생성
+        token = _social_user_token("google", google_id, name, state)
 
         return RedirectResponse(_oauth_redirect(state, token))
     except urllib.error.HTTPError as he:
@@ -763,20 +765,8 @@ def naver_callback(code: str = "", state: str = "web"):
         if not naver_id:
             return RedirectResponse(_oauth_redirect(state))
 
-        # 3) 같은 네이버 계정이면 기존 사용자 재사용, 없으면 새로 생성
-        with db.connect() as conn:
-            row = conn.execute(
-                "SELECT token FROM users WHERE provider = 'naver' AND provider_id = ?", (naver_id,)
-            ).fetchone()
-            if row:
-                token = row[0]
-            else:
-                token = uuid.uuid4().hex
-                conn.execute(
-                    "INSERT INTO users (token, provider, provider_id, display_name, created_at) VALUES (?, ?, ?, ?, ?)",
-                    (token, "naver", naver_id, nickname, datetime.now().isoformat(timespec="seconds")),
-                )
-                conn.commit()
+        # 3) 같은 네이버 계정(같은 앱)이면 기존 사용자 재사용, 없으면 새로 생성
+        token = _social_user_token("naver", naver_id, nickname, state)
 
         # 4) 웹/앱으로 토큰 전달 (프론트가 URL의 token을 읽어 로그인 처리)
         return RedirectResponse(_oauth_redirect(state, token))
