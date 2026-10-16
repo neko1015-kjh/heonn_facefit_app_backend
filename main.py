@@ -542,13 +542,20 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REDIRECT_URI = "https://neko1015-facefit-backend.hf.space/auth/google/callback"
 
-# 휴대폰 앱(네이티브)으로 돌아갈 때 쓰는 앱 주소(딥링크). app.json의 scheme과 같아야 합니다.
-APP_NATIVE_REDIRECT = "facefit://auth"
+# 휴대폰 앱(네이티브)으로 돌아갈 때 쓰는 앱 주소(딥링크). 각 앱 app.json의 scheme과 같아야 합니다.
+APP_NATIVE_REDIRECT = "facefit://auth"            # 정식 앱
+APP_NATIVE_REDIRECT_LITE = "facefitlite://auth"   # Lite 앱
 
 
 def _oauth_redirect(state, token=None):
-    """로그인 후 돌아갈 주소를 만듭니다. state='native'면 앱으로, 아니면 웹으로 보냅니다."""
-    base = APP_NATIVE_REDIRECT if state == "native" else f"{WEB_URL}/"
+    """로그인 후 돌아갈 주소를 만듭니다.
+    state='native'면 정식 앱으로, 'native_lite'면 Lite 앱으로, 그 외에는 웹으로 보냅니다."""
+    if state == "native":
+        base = APP_NATIVE_REDIRECT
+    elif state == "native_lite":
+        base = APP_NATIVE_REDIRECT_LITE
+    else:
+        base = f"{WEB_URL}/"
     if token:
         return f"{base}?token={token}"
     return f"{base}?login_error=1"
